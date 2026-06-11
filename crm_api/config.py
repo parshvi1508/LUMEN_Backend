@@ -1,0 +1,27 @@
+from functools import lru_cache
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    database_url: str
+    app_name: str = "Lumen CRM API"
+
+    @field_validator("database_url")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        if v.startswith("postgres://"):
+            v = v.replace("postgres://", "postgresql://", 1)
+        if v.startswith("postgresql://"):
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if not v.startswith("postgresql+asyncpg://"):
+            raise ValueError("DATABASE_URL must be a postgresql connection string")
+        return v
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
