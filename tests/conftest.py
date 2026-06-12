@@ -9,6 +9,7 @@ from sqlalchemy.pool import NullPool
 load_dotenv()
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/test")
 os.environ.setdefault("CHANNEL_HMAC_SECRET", "test-hmac-secret")
+os.environ.setdefault("CHANNEL_SEND_URL", "http://channel/send")
 
 
 @pytest_asyncio.fixture

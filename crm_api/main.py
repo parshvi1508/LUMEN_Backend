@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -21,7 +22,9 @@ class HealthResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await db.ping()
+    app.state.http_client = httpx.AsyncClient(timeout=10.0)
     yield
+    await app.state.http_client.aclose()
 
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)

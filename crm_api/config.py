@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     database_url: str
     channel_hmac_secret: str
+    channel_send_url: str
     app_name: str = "Lumen CRM API"
 
     @field_validator("database_url")
