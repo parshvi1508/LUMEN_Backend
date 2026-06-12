@@ -21,6 +21,22 @@ class PreviewRequest(BaseModel):
     definition: RuleGroup
 
 
+class SegmentCreate(BaseModel):
+    name: str = Field(min_length=1)
+    definition: RuleGroup
+    source: Literal["manual", "ai"] = "manual"
+    ai_rationale: str | None = None
+
+
+class SegmentOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    definition: dict
+    source: str | None
+    ai_rationale: str | None
+    created_at: datetime
+
+
 class CustomerSample(BaseModel):
     id: uuid.UUID
     external_id: str | None
