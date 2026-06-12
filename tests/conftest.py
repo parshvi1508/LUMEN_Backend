@@ -10,6 +10,8 @@ load_dotenv()
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/test")
 os.environ.setdefault("CHANNEL_HMAC_SECRET", "test-hmac-secret")
 os.environ.setdefault("CHANNEL_SEND_URL", "http://channel/send")
+os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
+os.environ.setdefault("OPENROUTER_API_KEY", "test-openrouter-key")
 
 
 @pytest_asyncio.fixture
