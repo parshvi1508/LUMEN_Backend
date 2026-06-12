@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from crm_api import db
 from crm_api.config import get_settings
 from crm_api.routers.ingest import router as ingest_router
+from crm_api.routers.segments import router as segments_router
 
 
 class HealthResponse(BaseModel):
@@ -23,6 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
 app.include_router(ingest_router)
+app.include_router(segments_router)
 
 
 async def health() -> JSONResponse:

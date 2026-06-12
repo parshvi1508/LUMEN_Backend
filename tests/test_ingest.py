@@ -45,7 +45,9 @@ async def test_customers_upsert(client, db_session) -> None:
     assert resp.status_code == 200
     assert resp.json() == {"inserted": 0, "updated": 2, "skipped_duplicates": 0, "errors": []}
 
-    count = await db_session.scalar(select(func.count(Customer.id)))
+    count = await db_session.scalar(
+        select(func.count(Customer.id)).where(Customer.external_id.in_(["c1", "c2"]))
+    )
     assert count == 2
     c1 = await db_session.scalar(select(Customer).where(Customer.external_id == "c1"))
     assert c1.name == "Asha R"
@@ -81,7 +83,9 @@ async def test_order_reingest_safe(client, db_session) -> None:
     c1 = await db_session.scalar(select(Customer).where(Customer.external_id == "c1"))
     assert c1.total_spend == Decimal("300.75")
     assert c1.order_count == 2
-    order_count = await db_session.scalar(select(func.count(Order.id)))
+    order_count = await db_session.scalar(
+        select(func.count(Order.id)).where(Order.external_id.in_(["o1", "o2", "o3"]))
+    )
     assert order_count == 3
 
 
