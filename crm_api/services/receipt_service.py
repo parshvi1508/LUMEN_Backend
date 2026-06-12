@@ -6,12 +6,14 @@ for a Redis or SQS buffer with batched flush, the API shape does not change.
 """
 
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from crm_api.models import Communication, CommunicationEvent
+from crm_api.models import Communication, CommunicationEvent, Order
+from crm_api.repositories import ingest_repo
 from crm_api.schemas.receipts import (
     ReceiptBatch,
     ReceiptEvent,
@@ -29,6 +31,42 @@ STATUS_RANKS: dict[str, int] = {
     "clicked": 50,
     "converted": 60,
 }
+
+SIMULATED_CONVERSION_AMOUNT = Decimal("499.00")
+
+
+async def _create_attributed_orders(
+    session: AsyncSession, converted_events: list[ReceiptEvent]
+) -> None:
+    rows = (
+        await session.execute(
+            select(Communication.id, Communication.customer_id, Communication.campaign_id).where(
+                Communication.id.in_([ev.communication_id for ev in converted_events])
+            )
+        )
+    ).all()
+    by_comm = {comm_id: (customer_id, campaign_id) for comm_id, customer_id, campaign_id in rows}
+
+    stmt = (
+        insert(Order)
+        .values(
+            [
+                {
+                    "external_id": f"conv_{ev.communication_id}",
+                    "customer_id": by_comm[ev.communication_id][0],
+                    "amount": SIMULATED_CONVERSION_AMOUNT,
+                    "items": [],
+                    "ordered_at": ev.occurred_at,
+                    "attributed_campaign_id": by_comm[ev.communication_id][1],
+                }
+                for ev in converted_events
+            ]
+        )
+        .on_conflict_do_nothing(index_elements=[Order.external_id])
+        .returning(Order.customer_id, Order.amount, Order.ordered_at)
+    )
+    inserted = [tuple(row) for row in (await session.execute(stmt)).all()]
+    await ingest_repo.apply_order_aggregates(session, inserted)
 
 
 async def process_batch(session: AsyncSession, batch: ReceiptBatch) -> ReceiptResponse:
@@ -93,6 +131,10 @@ async def process_batch(session: AsyncSession, batch: ReceiptBatch) -> ReceiptRe
                     )
                 )
             )
+
+        converted_events = [ev for ev in new_events if ev.event_type == "converted"]
+        if converted_events:
+            await _create_attributed_orders(session, converted_events)
 
     await session.commit()
 
