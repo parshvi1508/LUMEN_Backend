@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     database_url: str
     channel_hmac_secret: str
     channel_send_url: str
+    groq_api_key: str
+    openrouter_api_key: str
+    groq_model: str = "llama-3.3-70b-versatile"
+    openrouter_model: str = "meta-llama/llama-3.3-70b-instruct:free"
     app_name: str = "Lumen CRM API"
 
     @field_validator("database_url")
