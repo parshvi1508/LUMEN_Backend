@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from crm_api.db import get_session
 from crm_api.http_client import get_http_client
 from crm_api.models import Campaign
-from crm_api.schemas.campaigns import CampaignCreate, CampaignOut
-from crm_api.services import campaign_service, dispatch_service
+from crm_api.schemas.campaigns import CampaignCreate, CampaignOut, CampaignStats
+from crm_api.services import campaign_service, dispatch_service, stats_service
 from crm_api.services.segment_compiler import SegmentCompileError
 
 router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
@@ -40,6 +40,14 @@ async def dispatch_campaign(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except dispatch_service.ChannelDispatchError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/{campaign_id}/stats", response_model=CampaignStats)
+async def get_campaign_stats(campaign_id: uuid.UUID, session: SessionDep) -> CampaignStats:
+    try:
+        return await stats_service.campaign_stats(session, campaign_id)
+    except stats_service.CampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
 
 
 @router.get("/{campaign_id}", response_model=CampaignOut)

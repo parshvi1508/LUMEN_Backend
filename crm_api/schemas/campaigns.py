@@ -12,6 +12,24 @@ class CampaignCreate(BaseModel):
     message_template: str = Field(min_length=1)
 
 
+class FunnelStep(BaseModel):
+    status: str
+    rank: int
+    count: int
+
+
+class CampaignStats(BaseModel):
+    campaign_id: uuid.UUID
+    campaign_status: str | None
+    audience_size: int | None
+    total: int
+    funnel: list[FunnelStep]
+    failed: int
+    failure_rate: float
+    converted: int
+    dispatched_at: datetime | None
+
+
 class CampaignOut(BaseModel):
     id: uuid.UUID
     name: str
