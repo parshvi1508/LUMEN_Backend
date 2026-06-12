@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str
+    channel_hmac_secret: str
     app_name: str = "Lumen CRM API"
 
     @field_validator("database_url")
