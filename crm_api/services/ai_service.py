@@ -1,12 +1,19 @@
 import json
+from collections.abc import Callable
 
 import httpx
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from crm_api.models import Customer
-from crm_api.schemas.ai import LLMSegmentOutput, NLToSegmentResponse
+from crm_api.models import Customer, Segment
+from crm_api.schemas.ai import (
+    DraftMessagesRequest,
+    DraftMessagesResponse,
+    LLMDraftOutput,
+    LLMSegmentOutput,
+    NLToSegmentResponse,
+)
 from crm_api.schemas.segments import RuleImpact
 from crm_api.services import llm_client, segment_compiler
 
@@ -15,8 +22,36 @@ class SegmentGenerationError(Exception):
     pass
 
 
+class DraftGenerationError(Exception):
+    pass
+
+
+class SegmentNotFoundError(Exception):
+    pass
+
+
 class _InvalidLLMOutput(Exception):
     pass
+
+
+async def _generate[T](
+    client: httpx.AsyncClient, messages: list[dict[str, str]], parse: Callable[[str], T]
+) -> T:
+    for attempt in range(2):
+        result = await llm_client.complete(client, messages, json_mode=True)
+        try:
+            return parse(result.text)
+        except _InvalidLLMOutput:
+            if attempt == 1:
+                raise
+            messages.append({"role": "assistant", "content": result.text})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "Your previous output was invalid. Return corrected JSON only.",
+                }
+            )
+    raise AssertionError("unreachable")
 
 
 def _system_prompt() -> str:
@@ -59,26 +94,11 @@ async def nl_to_segment(
         {"role": "user", "content": prompt},
     ]
 
-    output: LLMSegmentOutput | None = None
-    for attempt in range(2):
-        result = await llm_client.complete(client, messages, json_mode=True)
-        try:
-            output = _parse(result.text)
-            break
-        except _InvalidLLMOutput as exc:
-            if attempt == 1:
-                raise SegmentGenerationError(str(exc)) from exc
-            messages.append({"role": "assistant", "content": result.text})
-            messages.append(
-                {
-                    "role": "user",
-                    "content": (
-                        f"Your previous output was invalid: {exc}. Return corrected JSON only."
-                    ),
-                }
-            )
+    try:
+        output = await _generate(client, messages, _parse)
+    except _InvalidLLMOutput as exc:
+        raise SegmentGenerationError(str(exc)) from exc
 
-    assert output is not None
     where = segment_compiler.compile_definition(output.definition)
     count = await session.scalar(select(func.count(Customer.id)).where(where))
 
@@ -99,4 +119,57 @@ async def nl_to_segment(
         count=count,
         per_rule_impact=impacts,
         warnings=warnings,
+    )
+
+
+def _draft_system_prompt(channel: str) -> str:
+    norms = {
+        "sms": "Keep it under 160 characters, plain text, no links unless essential.",
+        "whatsapp": "Conversational and short, one or two sentences, emoji sparingly.",
+        "email": "A subject style opener then two or three sentences is fine.",
+    }
+    return (
+        f"You write marketing messages for the {channel} channel. {norms[channel]}\n"
+        "Return JSON only, no prose, with one key variants, an array of exactly three items.\n"
+        'Each item is {"variant": short label, "message": the draft, "tone": tone label,\n'
+        '"reasoning": why this fits the audience}. Messages may use {{first_name}} and\n'
+        "{{last_order_amount}} tokens, leave them literal. Do not invent customer data."
+    )
+
+
+def _parse_draft(text: str) -> LLMDraftOutput:
+    try:
+        return LLMDraftOutput.model_validate_json(text)
+    except ValidationError as exc:
+        raise _InvalidLLMOutput(f"output did not match the schema: {exc}") from exc
+
+
+async def draft_messages(
+    session: AsyncSession, client: httpx.AsyncClient, payload: DraftMessagesRequest
+) -> DraftMessagesResponse:
+    segment = await session.get(Segment, payload.segment_id)
+    if segment is None:
+        raise SegmentNotFoundError(str(payload.segment_id))
+
+    messages = [
+        {"role": "system", "content": _draft_system_prompt(payload.channel)},
+        {
+            "role": "user",
+            "content": (
+                f"Campaign intent: {payload.campaign_intent}\n"
+                f"Target segment: {segment.name}\n"
+                f"Segment rules: {json.dumps(segment.definition)}"
+            ),
+        },
+    ]
+
+    try:
+        output = await _generate(client, messages, _parse_draft)
+    except _InvalidLLMOutput as exc:
+        raise DraftGenerationError(str(exc)) from exc
+
+    return DraftMessagesResponse(
+        segment_id=payload.segment_id,
+        channel=payload.channel,
+        variants=output.variants,
     )
