@@ -13,6 +13,8 @@ from crm_api.schemas.ai import (
     InsightResponse,
     NLToSegmentRequest,
     NLToSegmentResponse,
+    ProposeCampaignRequest,
+    ProposeCampaignResponse,
 )
 from crm_api.services import ai_service, stats_service
 from crm_api.services.llm_client import LLMUnavailableError
@@ -58,6 +60,18 @@ async def campaign_insight(
     except stats_service.CampaignNotFoundError as exc:
         raise HTTPException(status_code=404, detail="campaign not found") from exc
     except ai_service.InsightGenerationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LLMUnavailableError as exc:
+        raise HTTPException(status_code=503, detail="llm providers unavailable") from exc
+
+
+@router.post("/propose-campaign", response_model=ProposeCampaignResponse)
+async def propose_campaign(
+    payload: ProposeCampaignRequest, session: SessionDep, client: ClientDep
+) -> ProposeCampaignResponse:
+    try:
+        return await ai_service.propose_campaign(session, client, payload.goal)
+    except ai_service.ProposalGenerationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail="llm providers unavailable") from exc

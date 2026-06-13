@@ -42,6 +42,34 @@ async def dispatch_campaign(
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+@router.post("/{campaign_id}/approve", response_model=CampaignOut)
+async def approve_campaign(campaign_id: uuid.UUID, session: SessionDep) -> Campaign:
+    try:
+        return await campaign_service.approve_proposal(session, campaign_id)
+    except campaign_service.CampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
+    except campaign_service.NotAProposalError as exc:
+        raise HTTPException(status_code=409, detail="campaign is not a proposal") from exc
+
+
+@router.post("/{campaign_id}/execute", response_model=CampaignOut)
+async def execute_campaign(
+    campaign_id: uuid.UUID, session: SessionDep, client: ClientDep
+) -> Campaign:
+    try:
+        return await campaign_service.execute_proposal(session, client, campaign_id)
+    except campaign_service.CampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
+    except campaign_service.NotAProposalError as exc:
+        raise HTTPException(status_code=409, detail="campaign is not a proposal") from exc
+    except campaign_service.ProposalNotApprovedError as exc:
+        raise HTTPException(status_code=409, detail="proposal is not approved") from exc
+    except dispatch_service.InvalidCampaignStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except dispatch_service.ChannelDispatchError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @router.get("/{campaign_id}/stats", response_model=CampaignStats)
 async def get_campaign_stats(campaign_id: uuid.UUID, session: SessionDep) -> CampaignStats:
     try:

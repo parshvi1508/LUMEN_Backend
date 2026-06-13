@@ -2,18 +2,31 @@ import re
 import uuid
 from decimal import Decimal
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.models import Campaign, Communication, Customer, Order, Segment
 from crm_api.schemas.campaigns import CampaignCreate
 from crm_api.schemas.segments import RuleGroup
-from crm_api.services import segment_compiler
+from crm_api.services import dispatch_service, segment_compiler
 
 TOKEN_RE = re.compile(r"\{\{(\w+)\}\}")
 
 
 class SegmentNotFoundError(LookupError):
+    pass
+
+
+class CampaignNotFoundError(LookupError):
+    pass
+
+
+class NotAProposalError(RuntimeError):
+    pass
+
+
+class ProposalNotApprovedError(RuntimeError):
     pass
 
 
@@ -96,3 +109,32 @@ async def queued_count(session: AsyncSession, campaign_id: uuid.UUID) -> int:
             Communication.campaign_id == campaign_id, Communication.status == "queued"
         )
     )
+
+
+def _proposal_state(campaign: Campaign) -> str:
+    reasoning = campaign.ai_reasoning or {}
+    state = reasoning.get("proposal_state")
+    if state is None:
+        raise NotAProposalError(str(campaign.id))
+    return state
+
+
+async def approve_proposal(session: AsyncSession, campaign_id: uuid.UUID) -> Campaign:
+    campaign = await session.get(Campaign, campaign_id)
+    if campaign is None:
+        raise CampaignNotFoundError(str(campaign_id))
+    _proposal_state(campaign)
+    campaign.ai_reasoning = {**campaign.ai_reasoning, "proposal_state": "approved"}
+    await session.commit()
+    return campaign
+
+
+async def execute_proposal(
+    session: AsyncSession, client: httpx.AsyncClient, campaign_id: uuid.UUID
+) -> Campaign:
+    campaign = await session.get(Campaign, campaign_id)
+    if campaign is None:
+        raise CampaignNotFoundError(str(campaign_id))
+    if _proposal_state(campaign) != "approved":
+        raise ProposalNotApprovedError(str(campaign_id))
+    return await dispatch_service.dispatch_campaign(session, client, campaign_id)
