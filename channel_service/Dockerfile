@@ -12,4 +12,4 @@ USER appuser
 EXPOSE 8001
 HEALTHCHECK CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/healthz')"
 
-CMD ["uvicorn", "channel_service.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["sh", "-c", "uvicorn channel_service.main:app --host 0.0.0.0 --port ${PORT:-8001}"]

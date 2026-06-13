@@ -1,0 +1,44 @@
+# Render Blueprint for LUMEN_Backend.
+# Two separate web services in one repo, sharing nothing at runtime (PROJECT.md 3).
+# Secrets use `sync: false` -> you set them in the Render dashboard; they are NEVER committed.
+# If Render rejects `runtime: docker`, change both to `env: docker` (older blueprint schema). [guess, verify on apply]
+services:
+  - type: web
+    name: lumen-crm-api
+    runtime: docker
+    branch: master
+    dockerfilePath: ./crm_api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL          # Supabase pooler connection string
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: CHANNEL_HMAC_SECRET   # MUST be identical to lumen-channel's value
+        sync: false
+      - key: CHANNEL_SEND_URL      # points at the channel service; update if its name differs
+        value: https://lumen-channel.onrender.com/send
+      - key: CORS_ORIGINS          # set to your real Vercel URL once it exists; needs the CORS code change
+        value: https://your-frontend.vercel.app
+
+  - type: web
+    name: lumen-channel
+    runtime: docker
+    branch: master
+    dockerfilePath: ./channel_service/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: CHANNEL_HMAC_SECRET   # MUST be identical to lumen-crm-api's value
+        sync: false
+      - key: CRM_RECEIPTS_URL      # points back at the CRM; update if its name differs
+        value: https://lumen-crm-api.onrender.com/api/v1/receipts

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -30,6 +31,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in get_settings().cors_origins.split(",") if o.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 protected = [Depends(require_user)]
 app.include_router(ingest_router, dependencies=protected)
 app.include_router(segments_router, dependencies=protected)
