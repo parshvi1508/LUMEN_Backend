@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from crm_api import db
 from crm_api.config import get_settings
+from crm_api.routers.ai import router as ai_router
 from crm_api.routers.campaigns import router as campaigns_router
 from crm_api.routers.ingest import router as ingest_router
 from crm_api.routers.receipts import router as receipts_router
@@ -32,6 +33,7 @@ app.include_router(ingest_router)
 app.include_router(segments_router)
 app.include_router(campaigns_router)
 app.include_router(receipts_router)
+app.include_router(ai_router)
 
 
 async def health() -> JSONResponse:
