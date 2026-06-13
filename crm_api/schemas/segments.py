@@ -48,7 +48,10 @@ class CustomerSample(BaseModel):
 
 class RuleImpact(BaseModel):
     rule: str
-    count: int
+    path: list[int]           # index path to the leaf, disambiguates duplicate labels
+    count: int                # standalone match count (this rule alone)
+    audience_without: int     # full-segment audience if this leaf were removed
+    marginal: int             # audience_without - audience_with_all_rules
 
 
 class PreviewResponse(BaseModel):

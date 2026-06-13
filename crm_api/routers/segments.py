@@ -11,11 +11,10 @@ from crm_api.schemas.segments import (
     CustomerSample,
     PreviewRequest,
     PreviewResponse,
-    RuleImpact,
     SegmentCreate,
     SegmentOut,
 )
-from crm_api.services import segment_compiler
+from crm_api.services import segment_compiler, segment_preview
 
 router = APIRouter(prefix="/api/v1/segments", tags=["segments"])
 
@@ -26,11 +25,6 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 async def preview(payload: PreviewRequest, session: SessionDep) -> PreviewResponse:
     try:
         where = segment_compiler.compile_definition(payload.definition)
-        leaves = segment_compiler.collect_leaves(payload.definition)
-        leaf_filters = [
-            (segment_compiler.leaf_label(leaf), segment_compiler.compile_leaf(leaf))
-            for leaf in leaves
-        ]
     except segment_compiler.SegmentCompileError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -40,11 +34,7 @@ async def preview(payload: PreviewRequest, session: SessionDep) -> PreviewRespon
     )
     sample = [CustomerSample.model_validate(c, from_attributes=True) for c in sample_rows]
 
-    impacts = []
-    for label, leaf_where in leaf_filters:
-        leaf_count = await session.scalar(select(func.count(Customer.id)).where(leaf_where))
-        impacts.append(RuleImpact(rule=label, count=leaf_count))
-
+    impacts = await segment_preview.collect_rule_impacts(session, payload.definition, count)
     return PreviewResponse(count=count, sample=sample, per_rule_impact=impacts)
 
 

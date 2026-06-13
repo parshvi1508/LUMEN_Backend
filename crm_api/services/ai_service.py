@@ -22,8 +22,13 @@ from crm_api.schemas.ai import (
     ProposeCampaignResponse,
 )
 from crm_api.schemas.campaigns import CampaignCreate, CampaignStats
-from crm_api.schemas.segments import RuleImpact
-from crm_api.services import campaign_service, llm_client, segment_compiler, stats_service
+from crm_api.services import (
+    campaign_service,
+    llm_client,
+    segment_compiler,
+    segment_preview,
+    stats_service,
+)
 
 
 class SegmentGenerationError(Exception):
@@ -118,16 +123,10 @@ async def nl_to_segment(
     where = segment_compiler.compile_definition(output.definition)
     count = await session.scalar(select(func.count(Customer.id)).where(where))
 
-    impacts: list[RuleImpact] = []
-    warnings: list[str] = []
-    for leaf in segment_compiler.collect_leaves(output.definition):
-        label = segment_compiler.leaf_label(leaf)
-        leaf_count = await session.scalar(
-            select(func.count(Customer.id)).where(segment_compiler.compile_leaf(leaf))
-        )
-        impacts.append(RuleImpact(rule=label, count=leaf_count))
-        if leaf_count == 0:
-            warnings.append(f"rule '{label}' matches no customers")
+    impacts = await segment_preview.collect_rule_impacts(session, output.definition, count)
+    warnings = [
+        f"rule '{imp.rule}' matches no customers" for imp in impacts if imp.count == 0
+    ]
 
     return NLToSegmentResponse(
         definition=output.definition.model_dump(),

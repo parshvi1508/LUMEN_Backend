@@ -120,6 +120,43 @@ def leaf_label(leaf: RuleLeaf) -> str:
     return f"{leaf.field} {leaf.cmp} {leaf.value!r}"
 
 
+def walk_leaves_with_path(
+    group: RuleGroup, _prefix: tuple[int, ...] = ()
+) -> list[tuple[RuleLeaf, list[int]]]:
+    """Every leaf paired with its index path from the root. Pure, no SQL."""
+    out: list[tuple[RuleLeaf, list[int]]] = []
+    for i, rule in enumerate(group.rules):
+        if isinstance(rule, RuleGroup):
+            out.extend(walk_leaves_with_path(rule, (*_prefix, i)))
+        else:
+            out.append((rule, [*_prefix, i]))
+    return out
+
+
+def remove_at_path(group: RuleGroup, path: list[int]) -> RuleGroup | None:
+    """Return ``group`` with the node at ``path`` removed.
+
+    Empty groups collapse upward; if the root would empty, returns None
+    (meaning: no constraints left -> the whole customer base). Pure, no SQL.
+    """
+    head, *rest = path
+    new_rules: list[RuleGroup | RuleLeaf] = []
+    for idx, rule in enumerate(group.rules):
+        if idx != head:
+            new_rules.append(rule)
+            continue
+        if rest:
+            if not isinstance(rule, RuleGroup):
+                raise SegmentCompileError("path does not point at a group")
+            pruned = remove_at_path(rule, rest)
+            if pruned is not None:
+                new_rules.append(pruned)
+        # rest empty -> this index is the target node; drop it
+    if not new_rules:
+        return None
+    return RuleGroup(op=group.op, rules=new_rules)
+
+
 def compile_definition(group: RuleGroup, _depth: int = 1) -> ColumnElement:
     if _depth > MAX_DEPTH:
         raise SegmentCompileError(f"rule tree deeper than {MAX_DEPTH} levels")
