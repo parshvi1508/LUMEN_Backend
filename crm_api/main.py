@@ -2,11 +2,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from crm_api import db
+from crm_api.auth import require_user
 from crm_api.config import get_settings
 from crm_api.routers.ai import router as ai_router
 from crm_api.routers.campaigns import router as campaigns_router
@@ -29,11 +30,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
-app.include_router(ingest_router)
-app.include_router(segments_router)
-app.include_router(campaigns_router)
+protected = [Depends(require_user)]
+app.include_router(ingest_router, dependencies=protected)
+app.include_router(segments_router, dependencies=protected)
+app.include_router(campaigns_router, dependencies=protected)
+app.include_router(ai_router, dependencies=protected)
 app.include_router(receipts_router)
-app.include_router(ai_router)
 
 
 async def health() -> JSONResponse:
