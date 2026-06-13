@@ -12,6 +12,7 @@ os.environ.setdefault("CHANNEL_HMAC_SECRET", "test-hmac-secret")
 os.environ.setdefault("CHANNEL_SEND_URL", "http://channel/send")
 os.environ.setdefault("GROQ_API_KEY", "test-groq-key")
 os.environ.setdefault("OPENROUTER_API_KEY", "test-openrouter-key")
+os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret")
 
 
 @pytest_asyncio.fixture
@@ -39,6 +40,7 @@ async def db_session():
 async def client(db_session):
     from httpx import ASGITransport, AsyncClient
 
+    from crm_api.auth import require_user
     from crm_api.db import get_session
     from crm_api.main import app
 
@@ -46,6 +48,7 @@ async def client(db_session):
         yield db_session
 
     app.dependency_overrides[get_session] = override_session
+    app.dependency_overrides[require_user] = lambda: {"sub": "test-user"}
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     app.dependency_overrides.clear()
