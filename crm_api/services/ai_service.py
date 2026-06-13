@@ -16,12 +16,14 @@ from crm_api.schemas.ai import (
     InsightResponse,
     LLMDraftOutput,
     LLMInsightOutput,
+    LLMProposalOutput,
     LLMSegmentOutput,
     NLToSegmentResponse,
+    ProposeCampaignResponse,
 )
-from crm_api.schemas.campaigns import CampaignStats
+from crm_api.schemas.campaigns import CampaignCreate, CampaignStats
 from crm_api.schemas.segments import RuleImpact
-from crm_api.services import llm_client, segment_compiler, stats_service
+from crm_api.services import campaign_service, llm_client, segment_compiler, stats_service
 
 
 class SegmentGenerationError(Exception):
@@ -33,6 +35,10 @@ class DraftGenerationError(Exception):
 
 
 class InsightGenerationError(Exception):
+    pass
+
+
+class ProposalGenerationError(Exception):
     pass
 
 
@@ -242,3 +248,85 @@ async def campaign_insight(
         raise InsightGenerationError(str(exc)) from exc
 
     return InsightResponse(campaign_id=campaign_id, narrative=output.narrative, facts=facts)
+
+
+def _propose_system_prompt() -> str:
+    whitelist = segment_compiler.list_whitelist()
+    fields = "\n".join(f"  {field}: {', '.join(cmps)}" for field, cmps in whitelist.items())
+    return (
+        "You propose a marketing campaign from a stated goal.\n"
+        "Return JSON only, no prose, with keys segment, recommended_channel,\n"
+        "channel_reasoning, variants. segment is {definition, rationale} where definition\n"
+        'is a rule tree {"op": "AND" or "OR", "rules": [...]} of groups and leaves\n'
+        '{"field": ..., "cmp": ..., "value": ...}. Use only these fields and comparators:\n'
+        f"{fields}\n"
+        "recommended_channel is one of whatsapp, sms, email. channel_reasoning explains it.\n"
+        "variants is three items, each {variant, message, tone, reasoning}. Messages may use\n"
+        "{{first_name}} and {{last_order_amount}} tokens, leave them literal. Do not invent fields."
+    )
+
+
+def _parse_proposal(text: str) -> LLMProposalOutput:
+    try:
+        output = LLMProposalOutput.model_validate_json(text)
+    except ValidationError as exc:
+        raise _InvalidLLMOutput(f"output did not match the schema: {exc}") from exc
+    try:
+        segment_compiler.compile_definition(output.segment.definition)
+    except segment_compiler.SegmentCompileError as exc:
+        raise _InvalidLLMOutput(f"rule tree rejected by the whitelist: {exc}") from exc
+    return output
+
+
+async def propose_campaign(
+    session: AsyncSession, client: httpx.AsyncClient, goal: str
+) -> ProposeCampaignResponse:
+    messages = [
+        {"role": "system", "content": _propose_system_prompt()},
+        {"role": "user", "content": f"Goal: {goal}"},
+    ]
+
+    try:
+        output = await _generate(client, messages, _parse_proposal)
+    except _InvalidLLMOutput as exc:
+        raise ProposalGenerationError(str(exc)) from exc
+
+    segment = Segment(
+        name=f"Proposed: {goal[:60]}",
+        definition=output.segment.definition.model_dump(),
+        source="ai",
+        ai_rationale=output.segment.rationale,
+    )
+    session.add(segment)
+    await session.flush()
+
+    campaign = await campaign_service.create_campaign(
+        session,
+        CampaignCreate(
+            name=f"Proposed: {goal[:60]}",
+            segment_id=segment.id,
+            channel=output.recommended_channel,
+            message_template=output.variants[0].message,
+        ),
+    )
+
+    campaign.ai_reasoning = {
+        "proposal_state": "pending",
+        "goal": goal,
+        "segment_rationale": output.segment.rationale,
+        "channel_reasoning": output.channel_reasoning,
+        "variants": [v.model_dump() for v in output.variants],
+    }
+    await session.commit()
+
+    return ProposeCampaignResponse(
+        campaign_id=campaign.id,
+        proposal_state="pending",
+        goal=goal,
+        segment_definition=output.segment.definition.model_dump(),
+        segment_rationale=output.segment.rationale,
+        audience_size=campaign.audience_size,
+        recommended_channel=output.recommended_channel,
+        channel_reasoning=output.channel_reasoning,
+        variants=output.variants,
+    )

@@ -59,3 +59,31 @@ class InsightResponse(BaseModel):
     campaign_id: uuid.UUID
     narrative: str
     facts: list[InsightFact]
+
+
+class ProposeCampaignRequest(BaseModel):
+    goal: str = Field(min_length=1, max_length=2000)
+
+
+class ProposalSegment(BaseModel):
+    definition: RuleGroup
+    rationale: str = Field(min_length=1)
+
+
+class LLMProposalOutput(BaseModel):
+    segment: ProposalSegment
+    recommended_channel: Literal["whatsapp", "sms", "email"]
+    channel_reasoning: str = Field(min_length=1)
+    variants: list[MessageVariant] = Field(min_length=1, max_length=5)
+
+
+class ProposeCampaignResponse(BaseModel):
+    campaign_id: uuid.UUID
+    proposal_state: str
+    goal: str
+    segment_definition: dict
+    segment_rationale: str
+    audience_size: int | None
+    recommended_channel: str
+    channel_reasoning: str
+    variants: list[MessageVariant]
