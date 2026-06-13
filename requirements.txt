@@ -5,3 +5,4 @@ asyncpg
 alembic
 pydantic-settings
 pyjwt
+httpx
