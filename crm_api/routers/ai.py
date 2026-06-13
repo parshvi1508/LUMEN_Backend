@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated
 
 import httpx
@@ -9,10 +10,11 @@ from crm_api.http_client import get_http_client
 from crm_api.schemas.ai import (
     DraftMessagesRequest,
     DraftMessagesResponse,
+    InsightResponse,
     NLToSegmentRequest,
     NLToSegmentResponse,
 )
-from crm_api.services import ai_service
+from crm_api.services import ai_service, stats_service
 from crm_api.services.llm_client import LLMUnavailableError
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
@@ -42,6 +44,20 @@ async def draft_messages(
     except ai_service.SegmentNotFoundError as exc:
         raise HTTPException(status_code=404, detail="segment not found") from exc
     except ai_service.DraftGenerationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LLMUnavailableError as exc:
+        raise HTTPException(status_code=503, detail="llm providers unavailable") from exc
+
+
+@router.get("/campaigns/{campaign_id}/insight", response_model=InsightResponse)
+async def campaign_insight(
+    campaign_id: uuid.UUID, session: SessionDep, client: ClientDep
+) -> InsightResponse:
+    try:
+        return await ai_service.campaign_insight(session, client, campaign_id)
+    except stats_service.CampaignNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="campaign not found") from exc
+    except ai_service.InsightGenerationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LLMUnavailableError as exc:
         raise HTTPException(status_code=503, detail="llm providers unavailable") from exc

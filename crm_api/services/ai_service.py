@@ -1,4 +1,6 @@
 import json
+import re
+import uuid
 from collections.abc import Callable
 
 import httpx
@@ -10,12 +12,16 @@ from crm_api.models import Customer, Segment
 from crm_api.schemas.ai import (
     DraftMessagesRequest,
     DraftMessagesResponse,
+    InsightFact,
+    InsightResponse,
     LLMDraftOutput,
+    LLMInsightOutput,
     LLMSegmentOutput,
     NLToSegmentResponse,
 )
+from crm_api.schemas.campaigns import CampaignStats
 from crm_api.schemas.segments import RuleImpact
-from crm_api.services import llm_client, segment_compiler
+from crm_api.services import llm_client, segment_compiler, stats_service
 
 
 class SegmentGenerationError(Exception):
@@ -23,6 +29,10 @@ class SegmentGenerationError(Exception):
 
 
 class DraftGenerationError(Exception):
+    pass
+
+
+class InsightGenerationError(Exception):
     pass
 
 
@@ -173,3 +183,62 @@ async def draft_messages(
         channel=payload.channel,
         variants=output.variants,
     )
+
+
+_NUMBER = re.compile(r"\d+(?:\.\d+)?%?")
+
+
+def _insight_facts(stats: CampaignStats) -> list[InsightFact]:
+    facts = [InsightFact(label="total", value=stats.total)]
+    facts.extend(InsightFact(label=step.status, value=step.count) for step in stats.funnel)
+    facts.append(InsightFact(label="failure_rate_pct", value=round(stats.failure_rate * 100)))
+    conversion_pct = round(stats.converted / stats.total * 100) if stats.total else 0
+    facts.append(InsightFact(label="conversion_rate_pct", value=conversion_pct))
+    if stats.audience_size is not None:
+        facts.append(InsightFact(label="audience_size", value=stats.audience_size))
+    return facts
+
+
+def _check_grounded(narrative: str, allowed: set[str]) -> None:
+    for raw in _NUMBER.findall(narrative.replace(",", "")):
+        token = raw.rstrip("%")
+        if token.endswith(".0"):
+            token = token[:-2]
+        if token not in allowed:
+            raise _InvalidLLMOutput(f"narrative cited an ungrounded number: {raw}")
+
+
+async def campaign_insight(
+    session: AsyncSession, client: httpx.AsyncClient, campaign_id: uuid.UUID
+) -> InsightResponse:
+    stats = await stats_service.campaign_stats(session, campaign_id)
+    facts = _insight_facts(stats)
+    allowed = {str(fact.value) for fact in facts}
+
+    fact_lines = "\n".join(f"{fact.label}: {fact.value}" for fact in facts)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You summarize one marketing campaign in two or three plain sentences.\n"
+                "Cite only the numbers provided, do not invent or compute any other number.\n"
+                "Return JSON only, no prose, with one key narrative."
+            ),
+        },
+        {"role": "user", "content": f"Campaign funnel facts:\n{fact_lines}"},
+    ]
+
+    def parse(text: str) -> LLMInsightOutput:
+        try:
+            output = LLMInsightOutput.model_validate_json(text)
+        except ValidationError as exc:
+            raise _InvalidLLMOutput(f"output did not match the schema: {exc}") from exc
+        _check_grounded(output.narrative, allowed)
+        return output
+
+    try:
+        output = await _generate(client, messages, parse)
+    except _InvalidLLMOutput as exc:
+        raise InsightGenerationError(str(exc)) from exc
+
+    return InsightResponse(campaign_id=campaign_id, narrative=output.narrative, facts=facts)

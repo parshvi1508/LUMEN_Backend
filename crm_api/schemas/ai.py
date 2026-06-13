@@ -44,3 +44,18 @@ class DraftMessagesResponse(BaseModel):
     segment_id: uuid.UUID
     channel: str
     variants: list[MessageVariant]
+
+
+class InsightFact(BaseModel):
+    label: str
+    value: int
+
+
+class LLMInsightOutput(BaseModel):
+    narrative: str = Field(min_length=1)
+
+
+class InsightResponse(BaseModel):
+    campaign_id: uuid.UUID
+    narrative: str
+    facts: list[InsightFact]
