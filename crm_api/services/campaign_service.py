@@ -42,12 +42,18 @@ def render_message(template: str, fields: dict[str, object]) -> str:
 
 
 def customer_fields(customer: Customer, last_order_amount: Decimal | None) -> dict[str, object]:
+    last_order_at = (
+        f"{customer.last_order_at.day} {customer.last_order_at.strftime('%b')}"
+        if customer.last_order_at
+        else None
+    )
     return {
         "name": customer.name,
         "first_name": customer.name.split()[0] if customer.name else "",
         "city": customer.city,
         "total_spend": customer.total_spend,
         "last_order_amount": last_order_amount,
+        "last_order_at": last_order_at,
     }
 
 
