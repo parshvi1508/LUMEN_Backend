@@ -35,7 +35,11 @@ app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in get_settings().cors_origins.split(",") if o.strip()],
+    # rstrip("/") so a trailing slash in CORS_ORIGINS still matches the browser
+    # Origin header (which never has a trailing slash). Exact match otherwise.
+    allow_origins=[
+        o.strip().rstrip("/") for o in get_settings().cors_origins.split(",") if o.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
