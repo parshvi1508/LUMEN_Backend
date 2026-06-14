@@ -12,6 +12,7 @@ from crm_api.auth import require_user
 from crm_api.config import get_settings
 from crm_api.routers.ai import router as ai_router
 from crm_api.routers.campaigns import router as campaigns_router
+from crm_api.routers.customers import router as customers_router
 from crm_api.routers.ingest import router as ingest_router
 from crm_api.routers.receipts import router as receipts_router
 from crm_api.routers.segments import router as segments_router
@@ -42,6 +43,7 @@ app.add_middleware(
 
 protected = [Depends(require_user)]
 app.include_router(ingest_router, dependencies=protected)
+app.include_router(customers_router, dependencies=protected)
 app.include_router(segments_router, dependencies=protected)
 app.include_router(campaigns_router, dependencies=protected)
 app.include_router(ai_router, dependencies=protected)
