@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     groq_model: str = "llama-3.3-70b-versatile"
     openrouter_model: str = "meta-llama/llama-3.3-70b-instruct:free"
     app_name: str = "Lumen CRM API"
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "https://lumencrm-frontend.vercel.app"
 
     @field_validator("database_url")
     @classmethod
