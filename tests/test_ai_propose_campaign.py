@@ -94,12 +94,13 @@ async def test_propose_happy_path(propose_env) -> None:
     client, configure, llm_requests, _ = propose_env
     body = await propose(client, configure, 4)
 
-    assert body["proposal_state"] == "pending"
+    assert body["proposal_state"] == "draft"
     assert body["audience_size"] == 4
     assert body["recommended_channel"] == "email"
     assert len(body["variants"]) == 3
     assert body["channel_reasoning"]
-    assert uuid.UUID(body["campaign_id"])
+    # proposal is NOT persisted until the marketer approves
+    assert body["campaign_id"] is None
     assert len(llm_requests) == 1
 
 
@@ -123,28 +124,11 @@ async def test_propose_bad_twice_gives_422(propose_env) -> None:
     assert len(llm_requests) == 2
 
 
-async def test_execute_before_approve_refused(propose_env) -> None:
-    client, configure, _, channel_batches = propose_env
-    body = await propose(client, configure, 2)
-
-    resp = await client.post(f"/api/v1/campaigns/{body['campaign_id']}/execute")
-    assert resp.status_code == 409
-    assert channel_batches == []
-
-
-async def test_approve_then_execute_dispatches(propose_env) -> None:
-    client, configure, _, channel_batches = propose_env
-    body = await propose(client, configure, 3)
-    campaign_id = body["campaign_id"]
-
-    approve = await client.post(f"/api/v1/campaigns/{campaign_id}/approve")
-    assert approve.status_code == 200
-
-    execute = await client.post(f"/api/v1/campaigns/{campaign_id}/execute")
-    assert execute.status_code == 200
-    assert execute.json()["status"] == "active"
-    sent = [m for batch in channel_batches for m in batch["messages"]]
-    assert len(sent) == 3
+# NOTE: propose-campaign no longer persists a proposal campaign (it returns a
+# draft only). The marketer's approval in the UI creates one segment + one
+# campaign via /segments + /campaigns + /dispatch, which are covered by
+# test_campaigns.py and test_dispatch.py. The /approve and /execute lifecycle
+# endpoints remain for the plain-campaign guard test below.
 
 
 async def test_approve_unknown_404_and_execute_plain_campaign_409(propose_env) -> None:

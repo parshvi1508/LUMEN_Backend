@@ -78,7 +78,7 @@ class LLMProposalOutput(BaseModel):
 
 
 class ProposeCampaignResponse(BaseModel):
-    campaign_id: uuid.UUID
+    campaign_id: uuid.UUID | None = None  # proposal is not persisted until approved
     proposal_state: str
     goal: str
     segment_definition: dict

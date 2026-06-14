@@ -21,9 +21,8 @@ from crm_api.schemas.ai import (
     NLToSegmentResponse,
     ProposeCampaignResponse,
 )
-from crm_api.schemas.campaigns import CampaignCreate, CampaignStats
+from crm_api.schemas.campaigns import CampaignStats
 from crm_api.services import (
-    campaign_service,
     llm_client,
     segment_compiler,
     segment_preview,
@@ -290,41 +289,18 @@ async def propose_campaign(
     except _InvalidLLMOutput as exc:
         raise ProposalGenerationError(str(exc)) from exc
 
-    segment = Segment(
-        name=f"Proposed: {goal[:60]}",
-        definition=output.segment.definition.model_dump(),
-        source="ai",
-        ai_rationale=output.segment.rationale,
-    )
-    session.add(segment)
-    await session.flush()
-
-    campaign = await campaign_service.create_campaign(
-        session,
-        CampaignCreate(
-            name=f"Proposed: {goal[:60]}",
-            segment_id=segment.id,
-            channel=output.recommended_channel,
-            message_template=output.variants[0].message,
-        ),
-    )
-
-    campaign.ai_reasoning = {
-        "proposal_state": "pending",
-        "goal": goal,
-        "segment_rationale": output.segment.rationale,
-        "channel_reasoning": output.channel_reasoning,
-        "variants": [v.model_dump() for v in output.variants],
-    }
-    await session.commit()
+    # Proposal only - persist NOTHING until the marketer approves. Persisting on
+    # every propose flooded the segments/campaigns lists with duplicates.
+    where = segment_compiler.compile_definition(output.segment.definition)
+    count = await session.scalar(select(func.count(Customer.id)).where(where))
 
     return ProposeCampaignResponse(
-        campaign_id=campaign.id,
-        proposal_state="pending",
+        campaign_id=None,
+        proposal_state="draft",
         goal=goal,
         segment_definition=output.segment.definition.model_dump(),
         segment_rationale=output.segment.rationale,
-        audience_size=campaign.audience_size,
+        audience_size=count,
         recommended_channel=output.recommended_channel,
         channel_reasoning=output.channel_reasoning,
         variants=output.variants,
