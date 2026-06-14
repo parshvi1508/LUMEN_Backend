@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 440" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#475569"/>
+    </marker>
+  </defs>
+
+  <rect x="1" y="1" width="978" height="438" rx="16" fill="#f7f9fc" stroke="#e2e8f0"/>
+  <text x="28" y="38" font-size="16" font-weight="700" fill="#1e293b">System architecture</text>
+
+  <!-- edges -->
+  <line x1="208" y1="212" x2="296" y2="206" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <line x1="500" y1="160" x2="712" y2="118" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <line x1="716" y1="130" x2="534" y2="206" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+  <line x1="534" y1="216" x2="740" y2="226" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+  <line x1="470" y1="252" x2="700" y2="350" stroke="#475569" stroke-width="1.6" marker-end="url(#arr)"/>
+
+  <!-- edge labels -->
+  <g font-size="12" fill="#334155" text-anchor="middle">
+    <rect x="208" y="180" width="92" height="16" fill="#f7f9fc"/><text x="254" y="192">HTTPS, JWT</text>
+    <rect x="548" y="118" width="130" height="16" fill="#f7f9fc"/><text x="613" y="130">batch POST /send</text>
+    <rect x="520" y="176" width="210" height="16" fill="#f7f9fc"/><text x="625" y="188">async HMAC callbacks, /receipts</text>
+    <rect x="500" y="300" width="150" height="16" fill="#f7f9fc"/><text x="575" y="312">prompt, parse, validate</text>
+  </g>
+
+  <!-- nodes -->
+  <g text-anchor="middle">
+    <!-- Frontend -->
+    <rect x="36" y="176" width="172" height="72" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="122" y="208" font-size="13.5" font-weight="700" fill="#1e293b">Next.js Frontend</text>
+    <text x="122" y="228" font-size="12" fill="#64748b">(Vercel)</text>
+
+    <!-- CRM API -->
+    <rect x="300" y="156" width="232" height="96" rx="10" fill="#eef2ff" stroke="#c7d2fe"/>
+    <text x="416" y="190" font-size="13.5" font-weight="700" fill="#1e293b">CRM API (FastAPI)</text>
+    <text x="416" y="212" font-size="12" fill="#475569">customers / segments /</text>
+    <text x="416" y="230" font-size="12" fill="#475569">campaigns / ai / receipts</text>
+
+    <!-- Channel Service -->
+    <rect x="716" y="56" width="236" height="74" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="834" y="88" font-size="13.5" font-weight="700" fill="#1e293b">Channel Service</text>
+    <text x="834" y="108" font-size="12" fill="#64748b">(FastAPI stub)</text>
+
+    <!-- Database cylinder -->
+    <path d="M744,200 V272 A104,14 0 0 0 952,272 V200" fill="#ffffff" stroke="#cbd5e1"/>
+    <ellipse cx="848" cy="200" rx="104" ry="14" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="848" y="232" font-size="13" font-weight="700" fill="#1e293b">Supabase Postgres</text>
+    <text x="848" y="251" font-size="12" fill="#64748b">+ Supabase Auth</text>
+
+    <!-- LLM -->
+    <rect x="700" y="312" width="252" height="100" rx="10" fill="#fdeae6" stroke="#f0b9ad"/>
+    <text x="826" y="344" font-size="13.5" font-weight="700" fill="#1e293b">LLM</text>
+    <text x="826" y="366" font-size="12" fill="#475569">Groq Llama 3.3 70B (primary)</text>
+    <text x="826" y="386" font-size="12" fill="#475569">OpenRouter (fallback)</text>
+  </g>
+</svg>

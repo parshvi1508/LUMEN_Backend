@@ -13,20 +13,7 @@ produced it, so a human can verify the decision before acting on it.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  FE["Next.js Frontend<br/>(Vercel)"]
-  API["CRM API (FastAPI)<br/>customers / segments / campaigns / ai / receipts"]
-  CH["Channel Service<br/>(FastAPI stub)"]
-  DB[("Supabase Postgres<br/>+ Supabase Auth")]
-  LLM["LLM<br/>Groq Llama 3.3 70B primary<br/>OpenRouter fallback"]
-
-  FE -->|"HTTPS, JWT"| API
-  API -->|"batch POST /send"| CH
-  CH -.->|"async HMAC-signed callbacks<br/>POST /receipts"| API
-  API --> DB
-  API -->|"prompt, parse, validate"| LLM
-```
+![System architecture](docs/architecture.svg)
 
 Four deployable units: the frontend (Vercel), the CRM API, the channel service
 (a separate deployment, as the brief mandates), and Supabase (Postgres plus
@@ -40,26 +27,7 @@ deliver anything; it simulates outcomes and posts them back asynchronously, out
 of order, with deliberate duplicates and retries. The CRM ingests these and
 keeps each communication's state correct under all of that.
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant CH as Channel Service
-  participant R as CRM /receipts
-  participant E as Events log (append-only)
-  participant C as Communications (derived status)
-
-  CH->>R: POST batch [delivered, clicked dup, delivered dup, failed]
-  Note over R: Verify HMAC-SHA256 over raw body. 401 before any parse if wrong.
-  Note over R: In-batch dedupe by (communication_id, event_type)
-  R->>E: INSERT ON CONFLICT (communication_id, event_type) DO NOTHING
-  Note over E: Duplicate callbacks become silent no-ops (idempotency)
-  R->>C: UPDATE status WHERE status_rank < incoming_rank
-  Note over C: Out-of-order safe. clicked(5) before delivered(2) upgrades; late delivered never downgrades.
-  CH->>R: Retry same batch with backoff
-  R->>E: ON CONFLICT DO NOTHING returns 0 new rows
-  Note over R,C: Retry storm is harmless, status unchanged
-  R-->>CH: 200 {accepted, duplicate, unknown_communication}
-```
+![Receipt loop sequence](docs/receipt-loop.svg)
 
 How each property is enforced:
 
