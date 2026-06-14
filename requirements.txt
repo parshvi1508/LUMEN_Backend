@@ -4,5 +4,5 @@ sqlalchemy[asyncio]
 asyncpg
 alembic
 pydantic-settings
-pyjwt
+pyjwt[crypto]
 httpx

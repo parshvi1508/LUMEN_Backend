@@ -103,6 +103,30 @@ def test_none_field_renders_empty() -> None:
     assert render_message("City: {{city}}.", {"city": None}) == "City: ."
 
 
+async def test_list_campaigns_newest_first(client) -> None:
+    segment = await create_segment(client, name="list seg")
+    for nm in ("c_old", "c_new"):
+        resp = await client.post(
+            "/api/v1/campaigns",
+            json={
+                "name": nm,
+                "segment_id": segment["id"],
+                "channel": "email",
+                "message_template": "hi",
+            },
+        )
+        assert resp.status_code == 201
+
+    resp = await client.get("/api/v1/campaigns")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body, list)
+    names = [c["name"] for c in body]
+    assert "c_old" in names and "c_new" in names
+    # newest first: c_new appears before c_old
+    assert names.index("c_new") < names.index("c_old")
+
+
 async def test_campaign_unknown_segment_404(client) -> None:
     resp = await client.post(
         "/api/v1/campaigns",

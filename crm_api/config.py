@@ -10,7 +10,9 @@ class Settings(BaseSettings):
     database_url: str
     channel_hmac_secret: str
     channel_send_url: str
-    supabase_jwt_secret: str
+    # Auth: set supabase_jwks_url for ES256 (prod), or supabase_jwt_secret for HS256.
+    supabase_jwt_secret: str | None = None
+    supabase_jwks_url: str | None = None
     groq_api_key: str
     openrouter_api_key: str
     groq_model: str = "llama-3.3-70b-versatile"

@@ -3,6 +3,7 @@ from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.db import get_session
@@ -16,6 +17,12 @@ router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 ClientDep = Annotated[httpx.AsyncClient, Depends(get_http_client)]
+
+
+@router.get("", response_model=list[CampaignOut])
+async def list_campaigns(session: SessionDep) -> list[Campaign]:
+    rows = await session.scalars(select(Campaign).order_by(Campaign.created_at.desc()))
+    return list(rows)
 
 
 @router.post("", response_model=CampaignOut, status_code=201)
