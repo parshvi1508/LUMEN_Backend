@@ -2,13 +2,13 @@ import uuid
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.db import get_session
 from crm_api.http_client import get_http_client
-from crm_api.models import Campaign
+from crm_api.models import Campaign, Communication, CommunicationEvent, Order
 from crm_api.schemas.campaigns import CampaignCreate, CampaignOut, CampaignStats
 from crm_api.services import campaign_service, dispatch_service, stats_service
 from crm_api.services.segment_compiler import SegmentCompileError
@@ -83,6 +83,35 @@ async def get_campaign_stats(campaign_id: uuid.UUID, session: SessionDep) -> Cam
         return await stats_service.campaign_stats(session, campaign_id)
     except stats_service.CampaignNotFoundError as exc:
         raise HTTPException(status_code=404, detail="campaign not found") from exc
+
+
+@router.delete("/{campaign_id}", status_code=204)
+async def delete_campaign(campaign_id: uuid.UUID, session: SessionDep) -> Response:
+    campaign = await session.get(Campaign, campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    comm_ids = (
+        await session.scalars(
+            select(Communication.id).where(Communication.campaign_id == campaign_id)
+        )
+    ).all()
+    if comm_ids:
+        await session.execute(
+            delete(CommunicationEvent).where(
+                CommunicationEvent.communication_id.in_(comm_ids)
+            )
+        )
+        await session.execute(
+            delete(Communication).where(Communication.campaign_id == campaign_id)
+        )
+    await session.execute(
+        update(Order)
+        .where(Order.attributed_campaign_id == campaign_id)
+        .values(attributed_campaign_id=None)
+    )
+    await session.delete(campaign)
+    await session.commit()
+    return Response(status_code=204)
 
 
 @router.get("/{campaign_id}", response_model=CampaignOut)

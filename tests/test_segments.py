@@ -17,6 +17,31 @@ def leaf(field, cmp, value=None):
     return {"field": field, "cmp": cmp, "value": value}
 
 
+async def test_segment_create_dedupes_by_name(client) -> None:
+    defn = ast(leaf("city", "eq", "Pune"))
+    a = await client.post("/api/v1/segments", json={"name": "Dupe Seg", "definition": defn})
+    assert a.status_code == 201
+    # same name (case-insensitive) returns the existing row, not a duplicate
+    b = await client.post("/api/v1/segments", json={"name": "dupe seg", "definition": defn})
+    assert b.json()["id"] == a.json()["id"]
+
+
+async def test_segment_delete(client) -> None:
+    defn = ast(leaf("city", "eq", "Goa"))
+    created = (
+        await client.post("/api/v1/segments", json={"name": "Del Seg", "definition": defn})
+    ).json()
+    resp = await client.delete(f"/api/v1/segments/{created['id']}")
+    assert resp.status_code == 204
+    gone = await client.get(f"/api/v1/segments/{created['id']}")
+    assert gone.status_code == 404
+
+
+async def test_segment_delete_unknown_404(client) -> None:
+    resp = await client.delete("/api/v1/segments/00000000-0000-0000-0000-000000000000")
+    assert resp.status_code == 404
+
+
 async def test_and_tree_count_matches_orm(client, db_session) -> None:
     expected = await db_session.scalar(
         select(func.count(Customer.id)).where(
