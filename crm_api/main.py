@@ -12,6 +12,7 @@ from crm_api.auth import require_user
 from crm_api.config import get_settings
 from crm_api.routers.ai import router as ai_router
 from crm_api.routers.campaigns import router as campaigns_router
+from crm_api.routers.cron import router as cron_router
 from crm_api.routers.customers import router as customers_router
 from crm_api.routers.ingest import router as ingest_router
 from crm_api.routers.receipts import router as receipts_router
@@ -52,6 +53,7 @@ app.include_router(segments_router, dependencies=protected)
 app.include_router(campaigns_router, dependencies=protected)
 app.include_router(ai_router, dependencies=protected)
 app.include_router(receipts_router)
+app.include_router(cron_router)
 
 
 async def health() -> JSONResponse:
