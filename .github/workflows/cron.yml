@@ -1,0 +1,17 @@
+name: LUMEN Cron
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call Render endpoint
+        run: |
+          curl -X POST \
+            https://lumen-crm-api.onrender.com/internal/process-jobs \
+            -H "X-CRON-TOKEN: ${{ secrets.CRON_TOKEN }}"
