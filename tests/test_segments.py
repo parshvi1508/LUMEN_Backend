@@ -193,9 +193,7 @@ def test_remove_at_path_pure() -> None:
 # ── marginal per_rule_impact: API (DB-backed) ──
 async def test_marginal_impact_under_and(client, db_session) -> None:
     defn = ast(leaf("total_spend", "gte", 5000), leaf("city", "eq", "Mumbai"))
-    body = (
-        await client.post("/api/v1/segments/preview", json={"definition": defn})
-    ).json()
+    body = (await client.post("/api/v1/segments/preview", json={"definition": defn})).json()
     full = body["count"]
 
     only_spend = await db_session.scalar(
@@ -217,9 +215,7 @@ async def test_marginal_impact_under_and(client, db_session) -> None:
 
 async def test_marginal_single_leaf_is_total_minus_full(client, db_session) -> None:
     defn = ast(leaf("city", "eq", "Mumbai"))
-    body = (
-        await client.post("/api/v1/segments/preview", json={"definition": defn})
-    ).json()
+    body = (await client.post("/api/v1/segments/preview", json={"definition": defn})).json()
     total = await db_session.scalar(select(func.count(Customer.id)))
     imp = body["per_rule_impact"][0]
     assert imp["audience_without"] == total
@@ -227,12 +223,8 @@ async def test_marginal_single_leaf_is_total_minus_full(client, db_session) -> N
 
 
 async def test_duplicate_leaves_get_distinct_paths(client) -> None:
-    defn = ast(
-        leaf("city", "eq", "Delhi"), leaf("city", "eq", "Delhi"), op="OR"
-    )
-    body = (
-        await client.post("/api/v1/segments/preview", json={"definition": defn})
-    ).json()
+    defn = ast(leaf("city", "eq", "Delhi"), leaf("city", "eq", "Delhi"), op="OR")
+    body = (await client.post("/api/v1/segments/preview", json={"definition": defn})).json()
     impacts = body["per_rule_impact"]
     assert len(impacts) == 2
     assert sorted(tuple(i["path"]) for i in impacts) == [(0,), (1,)]

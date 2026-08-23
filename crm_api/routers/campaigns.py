@@ -97,13 +97,9 @@ async def delete_campaign(campaign_id: uuid.UUID, session: SessionDep) -> Respon
     ).all()
     if comm_ids:
         await session.execute(
-            delete(CommunicationEvent).where(
-                CommunicationEvent.communication_id.in_(comm_ids)
-            )
+            delete(CommunicationEvent).where(CommunicationEvent.communication_id.in_(comm_ids))
         )
-        await session.execute(
-            delete(Communication).where(Communication.campaign_id == campaign_id)
-        )
+        await session.execute(delete(Communication).where(Communication.campaign_id == campaign_id))
     await session.execute(
         update(Order)
         .where(Order.attributed_campaign_id == campaign_id)

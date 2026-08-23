@@ -36,9 +36,7 @@ async def test_upload_sets_spend(client) -> None:
     body = resp.json()
     assert body["created"] + body["updated"] == 1
 
-    listed = (
-        await client.get("/api/v1/customers", params={"search": "Spend One"})
-    ).json()
+    listed = (await client.get("/api/v1/customers", params={"search": "Spend One"})).json()
     match = [c for c in listed["data"] if c["external_id"] == "up1"]
     assert match
     assert match[0]["total_spend"] == 12345.0

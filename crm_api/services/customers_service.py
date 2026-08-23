@@ -57,9 +57,7 @@ async def upload_customers(session: AsyncSession, payload: UploadRequest) -> Upl
     ext_ids = list(deduped.keys())
 
     existing = set(
-        await session.scalars(
-            select(Customer.external_id).where(Customer.external_id.in_(ext_ids))
-        )
+        await session.scalars(select(Customer.external_id).where(Customer.external_id.in_(ext_ids)))
     )
 
     values = [
