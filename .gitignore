@@ -7,5 +7,4 @@ __pycache__/
 .agents/
 .claude/
 BUILD_LOG.md
-backend/ml/data/raw/olist/archive
-backend/ml/data/raw/olist/archive/
+ml/data/
