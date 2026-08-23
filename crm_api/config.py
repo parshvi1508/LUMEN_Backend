@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     openrouter_model: str = "meta-llama/llama-3.3-70b-instruct:free"
     app_name: str = "Lumen CRM API"
     cors_origins: str = "https://lumencrm-frontend.vercel.app"
+    ai_rate_limit_per_minute: int = 120
+    receipt_rate_limit_per_minute: int = 600
 
     @field_validator("database_url")
     @classmethod
