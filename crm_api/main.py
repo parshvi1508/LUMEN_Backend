@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from crm_api import db
 from crm_api.auth import require_user
 from crm_api.config import get_settings
+from crm_api.logging_config import configure_logging
+from crm_api.middleware import RequestContextMiddleware
 from crm_api.routers.ai import router as ai_router
 from crm_api.routers.campaigns import router as campaigns_router
 from crm_api.routers.cron import router as cron_router
@@ -26,6 +28,7 @@ class HealthResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    configure_logging()
     await db.ping()
     app.state.http_client = httpx.AsyncClient(timeout=10.0)
     yield
@@ -33,6 +36,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
+
+app.add_middleware(RequestContextMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
