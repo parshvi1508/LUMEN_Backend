@@ -63,8 +63,8 @@ app.include_router(ingest_router, dependencies=protected)
 app.include_router(customers_router, dependencies=protected)
 app.include_router(segments_router, dependencies=protected)
 app.include_router(campaigns_router, dependencies=protected)
-app.include_router(ai_router, dependencies=protected)
-app.include_router(receipts_router)
+app.include_router(ai_router, dependencies=[Depends(require_user), Depends(ai_rate_limit)])
+app.include_router(receipts_router, dependencies=[Depends(receipt_rate_limit)])
 app.include_router(cron_router)
 
 
