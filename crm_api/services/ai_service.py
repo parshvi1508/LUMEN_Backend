@@ -123,9 +123,7 @@ async def nl_to_segment(
     count = await session.scalar(select(func.count(Customer.id)).where(where))
 
     impacts = await segment_preview.collect_rule_impacts(session, output.definition, count)
-    warnings = [
-        f"rule '{imp.rule}' matches no customers" for imp in impacts if imp.count == 0
-    ]
+    warnings = [f"rule '{imp.rule}' matches no customers" for imp in impacts if imp.count == 0]
 
     return NLToSegmentResponse(
         definition=output.definition.model_dump(),

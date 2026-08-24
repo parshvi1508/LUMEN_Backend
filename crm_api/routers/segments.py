@@ -23,6 +23,7 @@ def _definition_hash(definition: dict) -> str:
     canonical = json.dumps(definition, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()
 
+
 router = APIRouter(prefix="/api/v1/segments", tags=["segments"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]

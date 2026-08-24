@@ -1,0 +1,101 @@
+{
+  "row_counts": {
+    "customers": 99441,
+    "orders": 99441,
+    "order_items": 112650,
+    "order_payments": 103886,
+    "order_reviews": 99224,
+    "products": 32951,
+    "sellers": 3095,
+    "category_translation": 71
+  },
+  "order_status": {
+    "delivered": 96478,
+    "shipped": 1107,
+    "canceled": 625,
+    "unavailable": 609,
+    "invoiced": 314,
+    "processing": 301,
+    "created": 5,
+    "approved": 2
+  },
+  "date_range": {
+    "min": "2016-09-04 21:15:19",
+    "max": "2018-10-17 17:30:18",
+    "days": 772
+  },
+  "delivered_orders": 96478,
+  "revenue_total": 15419773.75,
+  "order_value": {
+    "mean": 159.83,
+    "p10": 39.54,
+    "p50": 105.28,
+    "p90": 305.92,
+    "p99": 1052.39
+  },
+  "customers": {
+    "unique": 93358,
+    "repeat": 2801,
+    "repeat_rate": 0.03,
+    "one_time_rate": 0.97
+  },
+  "clv_proxy_total_spend": {
+    "mean": 165.17,
+    "p50": 107.78,
+    "p90": 317.99,
+    "p99": 1097.06
+  },
+  "recency_days": {
+    "snapshot": "2018-08-29 15:00:37",
+    "mean": 236.9,
+    "p10": 41.0,
+    "p50": 218.0,
+    "p90": 465.0
+  },
+  "interpurchase_gap_days": {
+    "count": 3120,
+    "mean": 78.8,
+    "p50": 29.0,
+    "p90": 240.0
+  },
+  "review_score": {
+    "mean": 4.086,
+    "distribution": {
+      "1": 11424,
+      "2": 3151,
+      "3": 8179,
+      "4": 19142,
+      "5": 57328
+    }
+  },
+  "payment_type": {
+    "credit_card": 76795,
+    "boleto": 19784,
+    "voucher": 5775,
+    "debit_card": 1529,
+    "not_defined": 3
+  },
+  "installments": {
+    "mean": 2.85,
+    "max": 24
+  },
+  "top_categories": {
+    "bed_bath_table": 11115,
+    "health_beauty": 9670,
+    "sports_leisure": 8641,
+    "furniture_decor": 8334,
+    "computers_accessories": 7827,
+    "housewares": 6964,
+    "watches_gifts": 5991,
+    "telephony": 4545,
+    "garden_tools": 4347,
+    "auto": 4235
+  },
+  "sellers": {
+    "count": 3095,
+    "top1_revenue_share": 0.0158,
+    "top10_revenue_share": 0.128,
+    "sellers_for_80pct_revenue": 562,
+    "sellers_for_80pct_share": 0.1816
+  }
+}

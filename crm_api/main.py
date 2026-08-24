@@ -12,6 +12,7 @@ from crm_api.auth import require_user
 from crm_api.config import get_settings
 from crm_api.logging_config import configure_logging
 from crm_api.middleware import RequestContextMiddleware
+from crm_api.rate_limit import RateLimiter, ip_key, make_rate_limit_dependency, user_key
 from crm_api.routers.ai import router as ai_router
 from crm_api.routers.campaigns import router as campaigns_router
 from crm_api.routers.cron import router as cron_router
@@ -50,6 +51,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_settings = get_settings()
+_ai_limiter = RateLimiter(_settings.ai_rate_limit_per_minute, 60.0)
+_receipt_limiter = RateLimiter(_settings.receipt_rate_limit_per_minute, 60.0)
+ai_rate_limit = make_rate_limit_dependency(_ai_limiter, user_key)
+receipt_rate_limit = make_rate_limit_dependency(_receipt_limiter, ip_key)
 
 protected = [Depends(require_user)]
 app.include_router(ingest_router, dependencies=protected)
