@@ -10,8 +10,10 @@ from crm_api.db import get_session
 from crm_api.http_client import get_http_client
 from crm_api.models import Campaign, Communication, CommunicationEvent, Order
 from crm_api.schemas.campaigns import CampaignCreate, CampaignOut, CampaignStats
-from crm_api.services import campaign_service, dispatch_service, stats_service
+from crm_api.schemas.scores import CampaignPnl
+from crm_api.services import campaign_service, dispatch_service, scores_service, stats_service
 from crm_api.services.segment_compiler import SegmentCompileError
+from crm_api.tenancy import require_tenant
 
 router = APIRouter(prefix="/api/v1/campaigns", tags=["campaigns"])
 
@@ -83,6 +85,18 @@ async def get_campaign_stats(campaign_id: uuid.UUID, session: SessionDep) -> Cam
         return await stats_service.campaign_stats(session, campaign_id)
     except stats_service.CampaignNotFoundError as exc:
         raise HTTPException(status_code=404, detail="campaign not found") from exc
+
+
+@router.get("/{campaign_id}/pnl", response_model=CampaignPnl)
+async def get_campaign_pnl(
+    campaign_id: uuid.UUID,
+    session: SessionDep,
+    tenant_id: Annotated[uuid.UUID, Depends(require_tenant)],
+) -> CampaignPnl:
+    pnl = await scores_service.campaign_pnl(session, tenant_id, campaign_id)
+    if pnl is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    return CampaignPnl(**pnl)
 
 
 @router.delete("/{campaign_id}", status_code=204)

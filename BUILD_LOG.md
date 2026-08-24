@@ -318,3 +318,31 @@ scale. None of these are presented as production-final; each names its swap.
 **Changed or rejected:** tenant_id is nullable for now so existing rows survive the upgrade; the not-null tightening happens after backfill in S23b. Enforcement is application-layer tenant scoping, because the backend connects with a service role that bypasses Postgres RLS; RLS with a per-request GUC is the documented alternative for a per-user DB role. Query scoping across services (S23b) is deliberately a separate slice, since it needs a live DB to test and must not be rushed alongside the schema.
 
 **Checks:** ruff clean; models import with 8 tables; 6 schema tests pass; migration 0002 emits valid SQL via alembic upgrade 0001:0002 --sql (offline, no DB). Live upgrade pending owner run of alembic upgrade head.
+
+## 2026-08-24, Slice S23b: Olist to DB load under the tenant
+
+**Asked:** Populate the live tenant with real data so the serving layer has something to serve.
+
+**Generated:** scripts/load_olist.py. Reads the shared ml.dataset.order_level, aggregates per customer_unique_id, and upserts customers, orders, and the ML scores into the tenant's tables, all stamped with the tenant id. Idempotent (customers and orders on external_id, scores on tenant_id plus customer_id), batched at 1000 rows. Olist is anonymized, so display names are synthesized deterministically with a seeded Faker and documented as not-real identities; timestamps are localized to UTC for the timestamptz columns.
+
+**Real result:** 95,420 customers, 98,666 orders, 95,420 scores loaded into tenant da036dba.
+
+**Checks:** ruff clean; live load completed exit 0 with the counts above.
+
+## 2026-08-24, Slice S24: Campaign economics
+
+**Asked:** Real P&L math, no hardcoded conversion value.
+
+**Generated:** crm_api/services/economics.py, pure functions. cost_per_message takes the per-campaign override or a documented default channel rate (business input, not data). campaign_pnl computes cost, profit, and ROI with a zero-cost guard. tests/test_economics.py (5 tests).
+
+**Checks:** ruff clean; 5 economics tests pass.
+
+## 2026-08-24, Slice S25: Tenant-scoped serving and decision layer
+
+**Asked:** Serve the money story and the per-customer decision layer, tenant-scoped, and real per-campaign P&L.
+
+**Generated:** crm_api/tenancy.py (require_tenant reads the JWT tenant claim off request.state, 403 if absent). crm_api/services/scores_service.py: portfolio_summary (expected value, high-tier opportunity, revenue-at-risk from lapsed customers, tier counts), list_decisions (score to reason to recommended action to expected impact, transparent rule-based actions), campaign_pnl (real attributed revenue from orders.attributed_campaign_id, contact cost from communications, replacing the old hardcoded 499). schemas/scores.py, routers/insights.py (GET /api/v1/insights/portfolio, /decisions), GET /api/v1/campaigns/{id}/pnl. tests/test_scores_service.py (3 live-DB tests: tenant-scoped portfolio and decisions with cross-tenant isolation, real attributed-revenue P&L, unknown campaign None).
+
+**Real result against the loaded tenant:** 95,420 scored; revenue-at-risk R$11,057,609; high-tier reactivation opportunity R$80,948; portfolio expected value R$153,156. Decision list returns per-customer action plus SHAP reasons.
+
+**Checks:** ruff clean; 5 economics + 3 serving tests pass; portfolio and decisions verified live against the loaded data.

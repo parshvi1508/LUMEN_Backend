@@ -18,6 +18,7 @@ from crm_api.routers.campaigns import router as campaigns_router
 from crm_api.routers.cron import router as cron_router
 from crm_api.routers.customers import router as customers_router
 from crm_api.routers.ingest import router as ingest_router
+from crm_api.routers.insights import router as insights_router
 from crm_api.routers.receipts import router as receipts_router
 from crm_api.routers.segments import router as segments_router
 
@@ -63,6 +64,7 @@ app.include_router(ingest_router, dependencies=protected)
 app.include_router(customers_router, dependencies=protected)
 app.include_router(segments_router, dependencies=protected)
 app.include_router(campaigns_router, dependencies=protected)
+app.include_router(insights_router, dependencies=protected)
 app.include_router(ai_router, dependencies=[Depends(require_user), Depends(ai_rate_limit)])
 app.include_router(receipts_router, dependencies=[Depends(receipt_rate_limit)])
 app.include_router(cron_router)
