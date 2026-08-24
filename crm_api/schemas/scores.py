@@ -25,6 +25,9 @@ class PortfolioSummary(BaseModel):
     portfolio_expected_value: float
     reactivation_opportunity_high_tier: float
     revenue_at_risk: float
+    revenue_leakage: float
+    lapsed_count: int
+    avg_expected_value: float
     tier_counts: dict[str, int]
 
 

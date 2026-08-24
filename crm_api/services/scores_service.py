@@ -55,6 +55,19 @@ async def portfolio_summary(session: AsyncSession, tenant_id: uuid.UUID) -> dict
                     ),
                     zero,
                 ).label("at_risk"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                CustomerScore.recency_days > LAPSED_DAYS,
+                                CustomerScore.expected_value,
+                            ),
+                            else_=zero,
+                        )
+                    ),
+                    zero,
+                ).label("at_risk_clv"),
+                func.count().filter(CustomerScore.recency_days > LAPSED_DAYS).label("lapsed_count"),
             ).where(CustomerScore.tenant_id == tenant_id)
         )
     ).one()
@@ -67,11 +80,19 @@ async def portfolio_summary(session: AsyncSession, tenant_id: uuid.UUID) -> dict
         )
     ).all()
 
+    # Revenue leakage = at-risk CLV (expected future value of lapsed customers)
+    # plus historical spend of lapsed customers (revenue already declining).
+    # This is the money on the table if no action is taken.
+    revenue_leakage = float(row.at_risk_clv) + float(row.at_risk)
+
     return {
         "customers_scored": int(row.n),
         "portfolio_expected_value": float(row.expected),
         "reactivation_opportunity_high_tier": float(row.opportunity),
         "revenue_at_risk": float(row.at_risk),
+        "revenue_leakage": round(revenue_leakage, 2),
+        "lapsed_count": int(row.lapsed_count),
+        "avg_expected_value": round(float(row.expected) / max(int(row.n), 1), 2),
         "tier_counts": {tier: int(count) for tier, count in tier_rows},
     }
 

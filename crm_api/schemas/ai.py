@@ -87,3 +87,5 @@ class ProposeCampaignResponse(BaseModel):
     recommended_channel: str
     channel_reasoning: str
     variants: list[MessageVariant]
+    tool_trace: list[dict] = []
+    expected_impact: dict | None = None

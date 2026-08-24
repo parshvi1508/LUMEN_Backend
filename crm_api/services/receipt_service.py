@@ -8,7 +8,7 @@ for a Redis or SQS buffer with batched flush, the API shape does not change.
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -114,22 +114,32 @@ async def process_batch(session: AsyncSession, batch: ReceiptBatch) -> ReceiptRe
             current = best.get(ev.communication_id)
             if current is None or STATUS_RANKS[ev.event_type] > STATUS_RANKS[current.event_type]:
                 best[ev.communication_id] = ev
-        for comm_id, ev in best.items():
-            rank = STATUS_RANKS[ev.event_type]
-            await session.execute(
-                update(Communication)
-                .where(Communication.id == comm_id, Communication.status_rank < rank)
-                .values(status=ev.event_type, status_rank=rank)
-            )
-            await session.execute(
-                update(Communication)
-                .where(Communication.id == comm_id)
-                .values(
-                    last_event_at=func.greatest(
-                        func.coalesce(Communication.last_event_at, ev.occurred_at),
-                        ev.occurred_at,
-                    )
+        if best:
+            params: dict[str, object] = {}
+            value_clauses = []
+            for i, (comm_id, ev) in enumerate(best.items()):
+                rank = STATUS_RANKS[ev.event_type]
+                params[f"id_{i}"] = comm_id
+                params[f"status_{i}"] = ev.event_type
+                params[f"rank_{i}"] = rank
+                params[f"at_{i}"] = ev.occurred_at
+                value_clauses.append(
+                    f"(:id_{i}::uuid, :status_{i}::text, :rank_{i}::int, :at_{i}::timestamptz)"
                 )
+            await session.execute(
+                text(
+                    "UPDATE communications AS c"
+                    " SET status = CASE WHEN c.status_rank < v.new_rank"
+                    "   THEN v.new_status ELSE c.status END,"
+                    " status_rank = CASE WHEN c.status_rank < v.new_rank"
+                    "   THEN v.new_rank ELSE c.status_rank END,"
+                    " last_event_at = GREATEST("
+                    "   COALESCE(c.last_event_at, v.occurred_at), v.occurred_at)"
+                    f" FROM (VALUES {', '.join(value_clauses)})"
+                    " AS v(id, new_status, new_rank, occurred_at)"
+                    " WHERE c.id = v.id"
+                ),
+                params,
             )
 
         converted_events = [ev for ev in new_events if ev.event_type == "converted"]

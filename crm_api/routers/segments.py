@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.db import get_session
@@ -57,20 +58,33 @@ async def create_segment(
 
     defn_dict = payload.definition.model_dump()
     defn_hash = _definition_hash(defn_dict)
-    rows = await session.scalars(select(Segment))
-    for existing in rows:
-        if _definition_hash(existing.definition) == defn_hash:
-            response.status_code = 200
-            return existing
+
+    existing = await session.scalar(
+        select(Segment).where(Segment.definition_hash == defn_hash).limit(1)
+    )
+    if existing is not None:
+        response.status_code = 200
+        return existing
 
     segment = Segment(
         name=payload.name.strip(),
         definition=defn_dict,
+        definition_hash=defn_hash,
         source=payload.source,
         ai_rationale=payload.ai_rationale,
     )
     session.add(segment)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing = await session.scalar(
+            select(Segment).where(Segment.definition_hash == defn_hash).limit(1)
+        )
+        if existing is not None:
+            response.status_code = 200
+            return existing
+        raise
     return segment
 
 

@@ -246,20 +246,156 @@ async def campaign_insight(
     return InsightResponse(campaign_id=campaign_id, narrative=output.narrative, facts=facts)
 
 
-def _propose_system_prompt() -> str:
+MAX_AGENT_ITERATIONS = 6
+
+AGENT_TOOLS = [
+    {
+        "name": "query_segment",
+        "description": "Count how many customers match a segment definition and return a sample.",
+        "parameters": {"definition": "A rule tree with op and rules."},
+        "error_hint": "If count is 0, broaden your rules. If very large, narrow them.",
+    },
+    {
+        "name": "score_risk",
+        "description": (
+            "Get risk scores and SHAP reasons for customers in a segment. "
+            "Returns avg reactivation probability, tier breakdown, and top reasons."
+        ),
+        "parameters": {"definition": "A rule tree with op and rules."},
+        "error_hint": "Scores may not exist for all customers. Check customers_found.",
+    },
+    {
+        "name": "estimate_campaign",
+        "description": (
+            "Estimate cost and potential revenue for a campaign targeting a segment via a channel."
+        ),
+        "parameters": {
+            "definition": "A rule tree with op and rules.",
+            "channel": "whatsapp, sms, or email",
+        },
+        "error_hint": "Revenue estimate uses expected values from ML scores.",
+    },
+]
+
+
+def _agent_system_prompt() -> str:
     whitelist = segment_compiler.list_whitelist()
     fields = "\n".join(f"  {field}: {', '.join(cmps)}" for field, cmps in whitelist.items())
-    return (
-        "You propose a marketing campaign from a stated goal.\n"
-        "Return JSON only, no prose, with keys segment, recommended_channel,\n"
-        "channel_reasoning, variants. segment is {definition, rationale} where definition\n"
-        'is a rule tree {"op": "AND" or "OR", "rules": [...]} of groups and leaves\n'
-        '{"field": ..., "cmp": ..., "value": ...}. Use only these fields and comparators:\n'
-        f"{fields}\n"
-        "recommended_channel is one of whatsapp, sms, email. channel_reasoning explains it.\n"
-        "variants is three items, each {variant, message, tone, reasoning}. Messages may use\n"
-        "{{first_name}} and {{last_order_amount}} tokens, leave them literal. Do not invent fields."
+    tool_desc = "\n".join(
+        f"  - {t['name']}: {t['description']} Parameters: {json.dumps(t['parameters'])}"
+        for t in AGENT_TOOLS
     )
+    return (
+        "You are a campaign planning agent. Given a marketing goal, you explore "
+        "the customer base using tools before proposing a campaign.\n\n"
+        "Available tools:\n" + tool_desc + "\n\n"
+        'To call a tool, return JSON: {"action": "tool", "tool": "<name>", '
+        '"args": {<params>}}\n'
+        'When ready to propose, return JSON: {"action": "propose", "proposal": {<proposal>}}\n\n'
+        "The proposal object must have keys: segment (with definition and rationale), "
+        "recommended_channel, channel_reasoning, variants (three items, each with "
+        "variant, message, tone, reasoning).\n"
+        'Segment definitions are rule trees: {"op": "AND" or "OR", "rules": [...]}, '
+        'leaves are {"field": ..., "cmp": ..., "value": ...}.\n'
+        "Use only these fields and comparators:\n" + fields + "\n\n"
+        "You MUST call at least 2 tools before proposing. Messages may use "
+        "{{first_name}} and {{last_order_amount}} tokens. Do not invent fields.\n"
+        "Return JSON only, no prose."
+    )
+
+
+async def _execute_tool(session: AsyncSession, tool_name: str, args: dict) -> dict:
+    """Execute an agent tool and return the result as a dict."""
+    if tool_name == "query_segment":
+        definition = segment_compiler.RuleGroup.model_validate(args["definition"])
+        segment_compiler.compile_definition(definition)
+        where = segment_compiler.compile_definition(definition)
+        count = await session.scalar(select(func.count(Customer.id)).where(where))
+        sample_rows = await session.scalars(
+            select(Customer).where(where).order_by(Customer.total_spend.desc()).limit(5)
+        )
+        sample = [
+            {"name": c.name, "total_spend": float(c.total_spend), "city": c.city}
+            for c in sample_rows
+        ]
+        return {"count": count, "sample": sample}
+
+    if tool_name == "score_risk":
+        from crm_api.models import CustomerScore
+
+        definition = segment_compiler.RuleGroup.model_validate(args["definition"])
+        where = segment_compiler.compile_definition(definition)
+        customer_ids = list(await session.scalars(select(Customer.id).where(where).limit(500)))
+        if not customer_ids:
+            return {"customers_found": 0, "message": "No customers match this segment."}
+        scores = (
+            (
+                await session.execute(
+                    select(CustomerScore).where(CustomerScore.customer_id.in_(customer_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not scores:
+            return {
+                "customers_found": len(customer_ids),
+                "scored": 0,
+                "message": "No ML scores available for these customers.",
+            }
+        avg_prob = sum(float(s.reactivation_probability) for s in scores) / len(scores)
+        tiers = {}
+        for s in scores:
+            tiers[s.value_tier] = tiers.get(s.value_tier, 0) + 1
+        all_reasons = []
+        for s in scores:
+            if s.reasons:
+                all_reasons.extend(s.reasons[:2])
+        top_reasons = {}
+        for r in all_reasons:
+            feature = r.get("feature", r) if isinstance(r, dict) else str(r)
+            top_reasons[feature] = top_reasons.get(feature, 0) + 1
+        sorted_reasons = sorted(top_reasons.items(), key=lambda kv: -kv[1])[:3]
+        return {
+            "customers_found": len(customer_ids),
+            "scored": len(scores),
+            "avg_reactivation_probability": round(avg_prob, 4),
+            "tier_breakdown": tiers,
+            "top_risk_drivers": [{"feature": f, "frequency": c} for f, c in sorted_reasons],
+        }
+
+    if tool_name == "estimate_campaign":
+        from crm_api.models import CustomerScore
+        from crm_api.services.economics import DEFAULT_CHANNEL_COST
+
+        definition = segment_compiler.RuleGroup.model_validate(args["definition"])
+        channel = args.get("channel", "email")
+        where = segment_compiler.compile_definition(definition)
+        count = await session.scalar(select(func.count(Customer.id)).where(where))
+        unit_cost = float(DEFAULT_CHANNEL_COST.get(channel, DEFAULT_CHANNEL_COST["email"]))
+        total_cost = round(unit_cost * (count or 0), 2)
+        customer_ids = list(await session.scalars(select(Customer.id).where(where).limit(500)))
+        expected_revenue = 0.0
+        if customer_ids:
+            scores = (
+                (
+                    await session.execute(
+                        select(CustomerScore).where(CustomerScore.customer_id.in_(customer_ids))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            expected_revenue = round(sum(float(s.expected_value) for s in scores), 2)
+        return {
+            "audience_size": count,
+            "channel": channel,
+            "estimated_cost": total_cost,
+            "estimated_revenue": expected_revenue,
+            "estimated_roi": round((expected_revenue - total_cost) / max(total_cost, 0.01), 2),
+        }
+
+    return {"error": f"Unknown tool: {tool_name}"}
 
 
 def _parse_proposal(text: str) -> LLMProposalOutput:
@@ -278,28 +414,122 @@ async def propose_campaign(
     session: AsyncSession, client: httpx.AsyncClient, goal: str
 ) -> ProposeCampaignResponse:
     messages = [
-        {"role": "system", "content": _propose_system_prompt()},
+        {"role": "system", "content": _agent_system_prompt()},
         {"role": "user", "content": f"Goal: {goal}"},
     ]
 
-    try:
-        output = await _generate(client, messages, _parse_proposal)
-    except _InvalidLLMOutput as exc:
-        raise ProposalGenerationError(str(exc)) from exc
+    tool_trace: list[dict] = []
+    seen_calls: list[str] = []
+    tools_called = 0
+    expected_impact = None
 
-    # Proposal only - persist NOTHING until the marketer approves. Persisting on
-    # every propose flooded the segments/campaigns lists with duplicates.
-    where = segment_compiler.compile_definition(output.segment.definition)
-    count = await session.scalar(select(func.count(Customer.id)).where(where))
+    for iteration in range(MAX_AGENT_ITERATIONS):
+        result = await llm_client.complete(client, messages, json_mode=True)
+        try:
+            data = json.loads(result.text)
+        except json.JSONDecodeError as exc:
+            raise ProposalGenerationError(f"Agent returned invalid JSON: {exc}") from exc
 
-    return ProposeCampaignResponse(
-        campaign_id=None,
-        proposal_state="draft",
-        goal=goal,
-        segment_definition=output.segment.definition.model_dump(),
-        segment_rationale=output.segment.rationale,
-        audience_size=count,
-        recommended_channel=output.recommended_channel,
-        channel_reasoning=output.channel_reasoning,
-        variants=output.variants,
+        action = data.get("action", "")
+
+        if action == "propose":
+            if tools_called < 2:
+                messages.append({"role": "assistant", "content": result.text})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "You must call at least 2 tools before proposing. "
+                        "Use query_segment and score_risk first.",
+                    }
+                )
+                continue
+            proposal_data = data.get("proposal", data)
+            try:
+                output = LLMProposalOutput.model_validate(proposal_data)
+            except ValidationError as exc:
+                raise ProposalGenerationError(f"Proposal did not match schema: {exc}") from exc
+            try:
+                segment_compiler.compile_definition(output.segment.definition)
+            except segment_compiler.SegmentCompileError as exc:
+                raise ProposalGenerationError(f"Rule tree rejected by whitelist: {exc}") from exc
+
+            where = segment_compiler.compile_definition(output.segment.definition)
+            count = await session.scalar(select(func.count(Customer.id)).where(where))
+
+            return ProposeCampaignResponse(
+                campaign_id=None,
+                proposal_state="draft",
+                goal=goal,
+                segment_definition=output.segment.definition.model_dump(),
+                segment_rationale=output.segment.rationale,
+                audience_size=count,
+                recommended_channel=output.recommended_channel,
+                channel_reasoning=output.channel_reasoning,
+                variants=output.variants,
+                tool_trace=tool_trace,
+                expected_impact=expected_impact,
+            )
+
+        if action == "tool":
+            tool_name = data.get("tool", "")
+            tool_args = data.get("args", {})
+
+            # Stuck detection: same tool + same args seen before
+            call_key = json.dumps({"tool": tool_name, "args": tool_args}, sort_keys=True)
+            if call_key in seen_calls:
+                messages.append({"role": "assistant", "content": result.text})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": "You already called this tool with these exact arguments. "
+                        "Try different parameters or propose your campaign.",
+                    }
+                )
+                continue
+            seen_calls.append(call_key)
+
+            try:
+                tool_result = await _execute_tool(session, tool_name, tool_args)
+            except Exception as exc:
+                tool_hint = next(
+                    (t["error_hint"] for t in AGENT_TOOLS if t["name"] == tool_name),
+                    "Check your parameters.",
+                )
+                tool_result = {"error": str(exc), "hint": tool_hint}
+
+            trace_entry = {
+                "iteration": iteration,
+                "tool": tool_name,
+                "args": tool_args,
+                "result": tool_result,
+            }
+            tool_trace.append(trace_entry)
+            tools_called += 1
+
+            if tool_name == "estimate_campaign" and "error" not in tool_result:
+                expected_impact = tool_result
+
+            messages.append({"role": "assistant", "content": result.text})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Tool result: {json.dumps(tool_result)}\n"
+                    "Call another tool or propose your campaign.",
+                }
+            )
+            continue
+
+        # Unknown action - ask agent to correct
+        messages.append({"role": "assistant", "content": result.text})
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    'Invalid action. Use {"action": "tool", ...} or {"action": "propose", ...}.'
+                ),
+            }
+        )
+
+    raise ProposalGenerationError(
+        f"Agent did not produce a proposal within {MAX_AGENT_ITERATIONS} iterations"
     )
