@@ -15,6 +15,8 @@ services:
     envVars:
       - key: DATABASE_URL          # Supabase pooler connection string
         sync: false
+      - key: CRON_TOKEN
+        sync: false
       - key: SUPABASE_JWT_SECRET
         sync: false
       - key: GROQ_API_KEY
@@ -27,6 +29,7 @@ services:
         value: https://lumen-channel.onrender.com/send
       - key: CORS_ORIGINS          # set to your real Vercel URL once it exists; needs the CORS code change
         value: https://your-frontend.vercel.app
+      
 
   - type: web
     name: lumen-channel
