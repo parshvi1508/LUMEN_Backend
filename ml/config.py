@@ -8,6 +8,15 @@ ML_DIR = Path(__file__).resolve().parent
 RAW_DIR = ML_DIR / "data" / "raw" / "olist" / "archive"
 FIGURES_DIR = ML_DIR / "figures"
 STATS_PATH = ML_DIR / "eda_stats.json"
+PROCESSED_DIR = ML_DIR / "data" / "processed"
+ARTIFACTS_DIR = ML_DIR / "artifacts"
+MANIFEST_PATH = PROCESSED_DIR / "manifest.json"
+PREPROCESSOR_PATH = ARTIFACTS_DIR / "preprocessor.joblib"
+
+# Temporal split: features use orders on or before CUTOFF, the reactivation label
+# uses orders in (CUTOFF, CUTOFF + HORIZON_DAYS]. Window ends at the dataset snapshot.
+CUTOFF = "2018-03-01"
+HORIZON_DAYS = 180
 
 CSV_FILES = {
     "customers": "olist_customers_dataset.csv",

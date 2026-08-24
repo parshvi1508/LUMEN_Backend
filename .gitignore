@@ -8,3 +8,4 @@ __pycache__/
 .claude/
 BUILD_LOG.md
 ml/data/
+ml/artifacts/
