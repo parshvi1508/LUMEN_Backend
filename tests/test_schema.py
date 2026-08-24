@@ -10,12 +10,14 @@ from sqlalchemy import Integer, UniqueConstraint
 from crm_api.models import Base, Communication, CommunicationEvent
 
 EXPECTED_TABLES = {
+    "tenants",
     "customers",
     "orders",
     "segments",
     "campaigns",
     "communications",
     "communication_events",
+    "customer_scores",
 }
 
 
@@ -56,8 +58,16 @@ def test_expected_indexes() -> None:
     } <= index_names
 
 
-def test_single_migration_revision() -> None:
+def test_migrations_form_single_head() -> None:
+    import re
     from pathlib import Path
 
     versions = Path(__file__).parent.parent / "alembic" / "versions"
-    assert len(list(versions.glob("*.py"))) == 1
+    revisions: set[str] = set()
+    down_revisions: set[str] = set()
+    for path in versions.glob("*.py"):
+        text = path.read_text()
+        revisions.update(re.findall(r'revision: str = "([^"]+)"', text))
+        down_revisions.update(re.findall(r'down_revision: str \| None = "([^"]+)"', text))
+    heads = revisions - down_revisions
+    assert len(heads) == 1

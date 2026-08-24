@@ -6,6 +6,5 @@ __pycache__/
 .ruff_cache/
 .agents/
 .claude/
-BUILD_LOG.md
 ml/data/
 ml/artifacts/
