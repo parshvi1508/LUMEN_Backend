@@ -1,15 +1,49 @@
-# xeno-crm-backend
+# Lumen CRM backend
 
-AI-native mini CRM backend for reaching D2C shoppers. Two FastAPI services that
-share nothing at runtime and communicate over HTTP only:
+A multi-tenant customer-intelligence platform. It ingests customers and orders,
+scores every customer for reactivation risk and expected value with real ML, and
+serves a decision layer: which customers are leaking revenue, why, what to do,
+and the money it is worth. Two FastAPI services share nothing at runtime and
+communicate over HTTP only:
 
-- `crm_api/` is the main CRM: ingest, segments, campaigns, AI endpoints, and the
-  receipt callback API.
+- `crm_api/` is the main API: ingest, segments, campaigns, the ML serving and
+  money endpoints, AI endpoints, and the receipt callback API.
 - `channel_service/` is a stubbed messaging channel: it simulates delivery
   outcomes and calls back into the CRM receipt API.
 
-The product bet is explainable AI: every AI output ships with the reasoning that
-produced it, so a human can verify the decision before acting on it.
+The product bet is explainable AI: every decision ships with the reasoning that
+produced it, so a human can verify it before acting.
+
+## Customer intelligence layer
+
+The `ml/` package is a reproducible, leak-safe pipeline. It runs on the real
+Olist Brazilian e-commerce dataset (about 96k customers, 99k orders).
+
+- **Leak-safe features and split.** Features use only orders on or before a
+  temporal cutoff; the reactivation label looks strictly forward. Encoders and
+  scalers are fit on train only. One pipeline serves train and inference, so
+  there is no train/serve skew. See `ml/features.py`, `ml/split.py`.
+- **Honest evaluation.** A HistGradientBoosting reactivation model, judged on
+  PR-AUC, ROC-AUC, and Brier, never accuracy. Test PR-AUC 0.026 against a 0.012
+  base rate (about 2.2x lift), ROC-AUC 0.61. Weak but real, which is the correct
+  finding for a marketplace that is about 97 percent one-time buyers. See
+  `ml/artifacts/model_card_latest.json`.
+- **Calibration is the ML win.** Class weighting inflates raw probabilities
+  (Brier 0.211). Isotonic calibration fit on validation only brings Brier to
+  0.0116, an 18x gain, which is what makes the expected-value math trustworthy.
+- **Explainability.** Per-customer SHAP reasons, aggregated to base features, are
+  precomputed into `customer_scores`. See `ml/score.py`.
+- **Decision layer.** `Customer to calibrated risk to SHAP reason to recommended
+  action to expected revenue`, tenant-scoped. See
+  `crm_api/services/scores_service.py`.
+
+## Multi-tenancy
+
+Every core table carries a `tenant_id`. The JWT carries a `tenant_id` claim
+(Supabase app_metadata), read in `crm_api/auth.py` and enforced in the insights
+and P&L reads. The backend connects with a service role, so isolation is
+application-layer; per-user Postgres RLS with a request GUC is the documented
+alternative.
 
 ## Architecture
 
@@ -95,6 +129,9 @@ health:
 - `POST /campaigns`, `GET /campaigns`, `GET /campaigns/{id}`,
   `POST /campaigns/{id}/dispatch`, `GET /campaigns/{id}/stats`,
   `POST /campaigns/{id}/approve`, `POST /campaigns/{id}/execute`
+- `GET /insights/portfolio` (money summary: revenue at risk, reactivation
+  opportunity, value tiers), `GET /insights/decisions` (ranked decision layer)
+- `GET /campaigns/{id}/pnl` (real attributed-revenue P&L)
 - `POST /ai/nl-to-segment`, `POST /ai/draft-messages`,
   `GET /ai/campaigns/{id}/insight`, `POST /ai/propose-campaign`
 - `POST /receipts` (HMAC-signed, machine to machine)
@@ -157,3 +194,30 @@ Set these in `.env` (gitignored). See `.env.example` for the full list.
 
 Secrets are never committed. Update `.env.example` whenever a new variable is
 added.
+
+## Deployment and ops
+
+Designed for free tiers. The CRM API and channel service run on Render free
+(512MB RAM, sleeps after 15 minutes idle, ephemeral disk, so model artifacts are
+built into the image, never written at runtime). Postgres is Supabase free (use
+the pooler). The frontend is on Vercel. Batch ML runs on GitHub Actions runners,
+never on the 512MB web dyno.
+
+- **CI**: `.github/workflows/ci.yml` runs ruff and pytest on every push.
+- **CD**: Render `autoDeploy` on `master`, Vercel auto-deploy. No manual step.
+- **Keep-alive**: `.github/workflows/cron.yml` pings public `/healthz` every 10
+  minutes to wake the sleeping free instance. It uses `-f` so failures are loud,
+  and retries absorb the cold-start window. Scheduled workflows run only from the
+  default branch, so this must live on `master`. Honest note: pinging to defeat
+  free-tier sleep is against the intent of the free plan; warm the app manually
+  before a live demo rather than relying on it.
+
+## Load the demo data
+
+After `alembic upgrade head` and creating a tenant row, load Olist plus the ML
+scores under that tenant:
+
+```bash
+python -m ml.split && python -m ml.train && python -m ml.score
+python -m scripts.load_olist
+```

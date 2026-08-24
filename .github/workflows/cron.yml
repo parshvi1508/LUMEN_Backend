@@ -1,4 +1,12 @@
-name: LUMEN Cron
+name: keepalive
+
+# External keep-alive. GitHub-hosted runners are not subject to Render free-tier
+# sleep, so an outside request every 10 minutes wakes a sleeping instance. Hits
+# public /healthz (no token, so no silent 401) with -f (fail loud) and retries
+# that absorb the cold-start 502/503 window.
+#
+# Scheduled workflows run only from the repository default branch, so this must
+# be on the default branch to fire on schedule.
 
 on:
   schedule:
@@ -6,12 +14,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  trigger:
+  ping:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Call Render endpoint
+      - name: Ping health endpoints
         run: |
-          curl -X POST \
-            https://lumen-crm-api.onrender.com/internal/process-jobs \
-            -H "X-CRON-TOKEN: ${{ secrets.CRON_TOKEN }}"
+          for url in \
+            https://lumen-crm-api.onrender.com/healthz \
+            https://lumen-channel.onrender.com/healthz; do
+            echo "pinging $url"
+            curl -fsS --retry 5 --retry-all-errors --retry-delay 15 --max-time 90 "$url"
+            echo
+          done

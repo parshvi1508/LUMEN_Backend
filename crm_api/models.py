@@ -30,14 +30,26 @@ class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )
+
+
 class Customer(Base):
     __tablename__ = "customers"
     __table_args__ = (
         Index("ix_customers_last_order_at", "last_order_at"),
         Index("ix_customers_total_spend", "total_spend"),
+        Index("ix_customers_tenant_id", "tenant_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"))
     external_id: Mapped[str | None] = mapped_column(Text, unique=True)
     name: Mapped[str] = mapped_column(Text)
     email: Mapped[str | None] = mapped_column(Text)
@@ -54,11 +66,19 @@ class Customer(Base):
 
 class Segment(Base):
     __tablename__ = "segments"
-    __table_args__ = (CheckConstraint("source IN ('manual','ai')", name="source"),)
+    __table_args__ = (
+        CheckConstraint("source IN ('manual','ai')", name="source"),
+        UniqueConstraint(
+            "tenant_id", "definition_hash", name="uq_segments_tenant_id_definition_hash"
+        ),
+        Index("ix_segments_tenant_id", "tenant_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"))
     name: Mapped[str] = mapped_column(Text)
     definition: Mapped[dict] = mapped_column(JSONB)
+    definition_hash: Mapped[str | None] = mapped_column(Text)
     source: Mapped[str | None] = mapped_column(Text)
     ai_rationale: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
@@ -71,9 +91,11 @@ class Campaign(Base):
     __table_args__ = (
         CheckConstraint("channel IN ('whatsapp','sms','email')", name="channel"),
         CheckConstraint("status IN ('draft','dispatching','active','completed')", name="status"),
+        Index("ix_campaigns_tenant_id", "tenant_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"))
     name: Mapped[str] = mapped_column(Text)
     segment_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("segments.id"))
     channel: Mapped[str | None] = mapped_column(Text)
@@ -81,6 +103,7 @@ class Campaign(Base):
     ai_reasoning: Mapped[dict | None] = mapped_column(JSONB)
     status: Mapped[str | None] = mapped_column(Text)
     audience_size: Mapped[int | None] = mapped_column(Integer)
+    cost_per_message: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
@@ -89,9 +112,13 @@ class Campaign(Base):
 
 class Order(Base):
     __tablename__ = "orders"
-    __table_args__ = (Index("ix_orders_customer_id_ordered_at", "customer_id", "ordered_at"),)
+    __table_args__ = (
+        Index("ix_orders_customer_id_ordered_at", "customer_id", "ordered_at"),
+        Index("ix_orders_tenant_id", "tenant_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"))
     external_id: Mapped[str | None] = mapped_column(Text, unique=True)
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"))
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
@@ -105,9 +132,13 @@ class Order(Base):
 
 class Communication(Base):
     __tablename__ = "communications"
-    __table_args__ = (Index("ix_communications_campaign_id_status", "campaign_id", "status"),)
+    __table_args__ = (
+        Index("ix_communications_campaign_id_status", "campaign_id", "status"),
+        Index("ix_communications_tenant_id", "tenant_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"))
     campaign_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("campaigns.id"))
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"))
     channel: Mapped[str] = mapped_column(Text)
@@ -140,3 +171,29 @@ class CommunicationEvent(Base):
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+
+
+class CustomerScore(Base):
+    """Latest batch scores per customer, written by the nightly ML scoring job
+    and read by the serving layer. One row per (tenant, customer)."""
+
+    __tablename__ = "customer_scores"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "customer_id", name="uq_customer_scores_tenant_id_customer_id"
+        ),
+        Index("ix_customer_scores_tenant_id", "tenant_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id"))
+    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id"))
+    reactivation_probability: Mapped[Decimal] = mapped_column(Numeric(7, 6))
+    expected_value: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    value_tier: Mapped[str] = mapped_column(Text)
+    recency_days: Mapped[int | None] = mapped_column(Integer)
+    frequency: Mapped[int | None] = mapped_column(Integer)
+    monetary_total: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    reasons: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
+    model_version: Mapped[str] = mapped_column(Text)
+    scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
