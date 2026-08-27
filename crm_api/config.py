@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     groq_api_key: str
     openrouter_api_key: str
     groq_model: str = "qwen/qwen3.6-27b"
-    openrouter_model: str = "meta-llama/llama-3.3-70b-instruct:free"
+    openrouter_model: str = "openai/gpt-oss-20b:free"
     app_name: str = "Lumen CRM API"
     cors_origins: str = "https://lumencrm-frontend.vercel.app"
     default_tenant_id: str | None = None
