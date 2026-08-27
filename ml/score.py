@@ -55,6 +55,8 @@ def _base_feature(name: str) -> str:
     for cat in CATEGORICAL_FEATURES:
         if stripped == cat or stripped.startswith(cat + "_"):
             return cat
+    if stripped.startswith("tfidf") or stripped.startswith("svd"):
+        return "review_topics"
     return stripped
 
 

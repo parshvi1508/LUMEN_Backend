@@ -11,6 +11,8 @@ import json
 import joblib
 import pandas as pd
 from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import TruncatedSVD
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
@@ -30,10 +32,14 @@ from ml.features import (
     FEATURE_COLUMNS,
     LABEL,
     NUMERIC_FEATURES,
+    TEXT_FEATURES,
     build_features,
 )
 
 SEED = 42
+
+
+SVD_COMPONENTS = 5
 
 
 def make_preprocessor() -> ColumnTransformer:
@@ -49,10 +55,17 @@ def make_preprocessor() -> ColumnTransformer:
             ("onehot", OneHotEncoder(handle_unknown="ignore")),
         ]
     )
+    text = Pipeline(
+        [
+            ("tfidf", TfidfVectorizer(max_features=500, stop_words=None, sublinear_tf=True)),
+            ("svd", TruncatedSVD(n_components=SVD_COMPONENTS, random_state=42)),
+        ]
+    )
     return ColumnTransformer(
         [
             ("num", numeric, NUMERIC_FEATURES),
             ("cat", categorical, CATEGORICAL_FEATURES),
+            ("txt", text, TEXT_FEATURES[0]),
         ]
     )
 
