@@ -18,6 +18,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
 from sklearn.pipeline import Pipeline
 
+from ml import wandb_logger
 from ml.config import (
     ARTIFACTS_DIR,
     CUTOFF,
@@ -99,6 +100,12 @@ def build_and_save() -> dict:
     val = pd.read_parquet(PROCESSED_DIR / "val.parquet")
     test = pd.read_parquet(PROCESSED_DIR / "test.parquet")
 
+    wandb_logger.init(
+        project="lumen-reactivation",
+        name="reactivation-train",
+        config={"max_iter": 400, "features": FEATURE_COLUMNS},
+    )
+
     pipeline = train_model(train)
 
     value = float(train.loc[train[LABEL] == 1, "monetary_avg"].mean())
@@ -135,6 +142,11 @@ def build_and_save() -> dict:
     registry = json.loads(registry_path.read_text()) if registry_path.exists() else []
     registry.append({"version": version, "test_pr_auc": card["metrics"]["test"]["pr_auc"]})
     registry_path.write_text(json.dumps(registry, indent=2), encoding="utf-8")
+
+    wandb_logger.log_metrics(card["metrics"]["test"])
+    wandb_logger.log_model_card(card, name="reactivation-card")
+    wandb_logger.log_artifact_file(model_path, f"reactivation-model-{version}")
+    wandb_logger.finish()
 
     return card
 

@@ -22,8 +22,15 @@ ClientDep = Annotated[httpx.AsyncClient, Depends(get_http_client)]
 
 
 @router.get("", response_model=list[CampaignOut])
-async def list_campaigns(session: SessionDep) -> list[Campaign]:
-    rows = await session.scalars(select(Campaign).order_by(Campaign.created_at.desc()))
+async def list_campaigns(
+    session: SessionDep,
+    tenant_id: Annotated[uuid.UUID, Depends(require_tenant)],
+) -> list[Campaign]:
+    rows = await session.scalars(
+        select(Campaign)
+        .where(Campaign.tenant_id == tenant_id)
+        .order_by(Campaign.created_at.desc())
+    )
     return list(rows)
 
 

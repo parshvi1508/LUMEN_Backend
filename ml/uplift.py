@@ -19,6 +19,7 @@ import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
 
+from ml import wandb_logger
 from ml.config import ARTIFACTS_DIR, PROCESSED_DIR
 from ml.features import FEATURE_COLUMNS, LABEL
 from ml.split import make_preprocessor
@@ -119,6 +120,12 @@ def build_and_save() -> dict:
     val = pd.read_parquet(PROCESSED_DIR / "val.parquet")
     test = pd.read_parquet(PROCESSED_DIR / "test.parquet")
 
+    wandb_logger.init(
+        project="lumen-uplift",
+        name="t-learner-train",
+        config={"features": FEATURE_COLUMNS, "approach": "T-learner"},
+    )
+
     preprocessor = make_preprocessor()
     preprocessor.fit(train[FEATURE_COLUMNS])
 
@@ -179,6 +186,15 @@ def build_and_save() -> dict:
     (UPLIFT_DIR / "uplift_card_latest.json").write_text(
         json.dumps(card, indent=2), encoding="utf-8"
     )
+
+    wandb_logger.log_metrics({
+        "test_qini": test_qini,
+        "test_auc_treatment": auc_t,
+        "test_auc_control": auc_c,
+    })
+    wandb_logger.log_model_card(card, name="uplift-card")
+    wandb_logger.finish()
+
     return card
 
 

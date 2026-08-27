@@ -18,6 +18,7 @@ from crm_api.schemas.segments import (
     SegmentOut,
 )
 from crm_api.services import segment_compiler, segment_preview
+from crm_api.tenancy import require_tenant
 
 
 def _definition_hash(definition: dict) -> str:
@@ -89,8 +90,15 @@ async def create_segment(
 
 
 @router.get("", response_model=list[SegmentOut])
-async def list_segments(session: SessionDep) -> list[Segment]:
-    rows = await session.scalars(select(Segment).order_by(Segment.created_at.desc()))
+async def list_segments(
+    session: SessionDep,
+    tenant_id: Annotated[uuid.UUID, Depends(require_tenant)],
+) -> list[Segment]:
+    rows = await session.scalars(
+        select(Segment)
+        .where(Segment.tenant_id == tenant_id)
+        .order_by(Segment.created_at.desc())
+    )
     return list(rows)
 
 
