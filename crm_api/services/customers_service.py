@@ -21,12 +21,19 @@ from crm_api.schemas.customers import (
 
 
 async def list_customers(
-    session: AsyncSession, search: str | None, page: int, page_size: int
+    session: AsyncSession,
+    search: str | None,
+    page: int,
+    page_size: int,
+    *,
+    tenant_id: uuid.UUID | None = None,
 ) -> PaginatedCustomers:
     page = max(page, 0)
     page_size = min(max(page_size, 1), 500)
 
     base = select(Customer)
+    if tenant_id is not None:
+        base = base.where(Customer.tenant_id == tenant_id)
     if search:
         term = f"%{search}%"
         base = base.where(

@@ -370,3 +370,29 @@ scale. None of these are presented as production-final; each names its swap.
 **UX improvements:** Landing page CTAs route to /today (action-first, not analytics-first). Stats updated to 96k scored + NLP callout. Today page gets portfolio summary cards (revenue at risk, recoverable, lapsed count, avg EV) above the worklist, plus link to revenue radar. Dashboard priority list header links to full worklist. DecisionDrawer adds channel picker (email/SMS/WhatsApp) with visual toggle and confirmation text showing target tier.
 
 **Checks:** ruff clean; tsc --noEmit clean. Model retrained and scored with new features. Merged to master on both repos.
+
+## 2026-08-27, Slice S28: Tenant enforcement, W&B, CLV backtest, UX polish
+
+**Asked:** Fix issues #20 (W&B experiment tracking), #21 (CLV backtest), #22 (tenant enforcement on legacy list routes). UX audit: does a user understand what/how to use the product? Are models deprecated?
+
+**Generated:**
+
+**Issue #22 (Tenant enforcement):** Added `require_tenant` + `tenant_id` filter to all three legacy list routes: `list_customers` (customers.py), `list_segments` (segments.py), `list_campaigns` (campaigns.py). `customers_service.list_customers` now accepts optional `tenant_id` kwarg and applies `.where(Customer.tenant_id == tenant_id)`. All list routes now tenant-scoped via JWT claim.
+
+**Issue #20 (W&B integration):** New `ml/wandb_logger.py` with silent no-op fallback when wandb is not installed or `WANDB_API_KEY` is unset. Functions: `init`, `log_metrics`, `log_model_card`, `log_artifact_file`, `finish`. Wired into `train.py` (logs test metrics, model card artifact, model file) and `uplift.py` (logs Qini/AUC metrics, uplift model card). Added `WANDB_API_KEY=` to `.env.example`.
+
+**Issue #21 (CLV backtest):** New `scripts/backtest_clv.py`. Async script that loads `customer_scores` and `orders`, computes realized revenue per customer in a [scored_at, scored_at + horizon] window, and reports MAE, RMSE, correlation, mean predicted vs realized, and decile calibration table. CLI args: `--tenant-id`, `--horizon-days` (default 90).
+
+**UX audit and fixes:**
+- Brand logo now links to /today (primary workspace) instead of /dashboard
+- Win-back buttons on dashboard now always visible, not hover-only (was invisible on mobile/touch)
+- Landing page "0.012 calibrated Brier score" replaced with "98.8% probability calibration accuracy" (marketer-friendly)
+- SHAP reason labels: raw feature names replaced with human-readable labels (e.g., "recency_days" becomes "Days since last order") in DecisionDrawer, TodayWorklist, and Dashboard
+- Empty state: "Run the ML pipeline first" replaced with "Import your customer data on the Customers page, and Lumen will score them automatically"
+- Today page: added onboarding hint explaining what each row means and how to act
+
+**Model deprecation check:** Confirmed llama-3.3-70b-versatile (Groq) and meta-llama/llama-3.3-70b-instruct:free (OpenRouter) are current, not deprecated.
+
+**Bug fix:** test_winback_high_tier_filters_by_spend was failing because the test customer spend (5000) fell below the 75th percentile threshold computed across all 3 test customers. Fixed by setting spend to 9000.
+
+**Checks:** ruff clean on all changed backend files; tsc --noEmit clean; 4 winback tests pass.

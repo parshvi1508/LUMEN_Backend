@@ -47,7 +47,10 @@ async def require_user(request: Request, creds: BearerDep) -> dict:
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail="invalid token") from exc
     request.state.user = payload
-    request.state.tenant_id = payload.get("tenant_id") or (payload.get("app_metadata") or {}).get(
+    tenant_id = payload.get("tenant_id") or (payload.get("app_metadata") or {}).get(
         "tenant_id"
     )
+    if not tenant_id:
+        tenant_id = _settings.default_tenant_id
+    request.state.tenant_id = tenant_id
     return payload

@@ -22,7 +22,7 @@ async def _setup(session):
             tenant_id=tid,
             name="Lapsed High",
             external_id=f"lh-{tid}",
-            total_spend=Decimal("5000"),
+            total_spend=Decimal("9000"),
             last_order_at=lapsed,
         ),
         Customer(
