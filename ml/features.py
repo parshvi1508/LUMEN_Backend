@@ -18,11 +18,20 @@ NUMERIC_FEATURES = [
     "avg_installments",
     "avg_freight_ratio",
     "avg_delivery_delay",
+    "review_word_count",
+    "review_text_ratio",
 ]
 CATEGORICAL_FEATURES = ["payment_type"]
-FEATURE_COLUMNS = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+TEXT_FEATURES = ["review_text"]
+FEATURE_COLUMNS = NUMERIC_FEATURES + CATEGORICAL_FEATURES + TEXT_FEATURES
 LABEL = "label"
 KEY = "customer_unique_id"
+
+
+def _word_count(text: str) -> int:
+    if not text or not isinstance(text, str):
+        return 0
+    return len(text.split())
 
 
 def build_features(orders: pd.DataFrame, cutoff: str, horizon_days: int) -> pd.DataFrame:
@@ -50,6 +59,22 @@ def build_features(orders: pd.DataFrame, cutoff: str, horizon_days: int) -> pd.D
     feat["payment_type"] = grouped["payment_type"].agg(
         lambda s: s.mode().iat[0] if not s.mode().empty else "unknown"
     )
+
+    text_agg = past.groupby(KEY).agg(
+        review_text=(
+            "review_comment_message",
+            lambda s: " ".join(s.fillna("").astype(str)),
+        ),
+        _has_text=(
+            "review_comment_message",
+            lambda s: (s.fillna("").astype(str).str.len() > 0).sum(),
+        ),
+        _total_reviews=("review_comment_message", "count"),
+    )
+    feat["review_text"] = text_agg["review_text"].fillna("")
+    feat["review_word_count"] = feat["review_text"].apply(_word_count).astype(float)
+    denom = text_agg["_total_reviews"].replace(0, 1)
+    feat["review_text_ratio"] = (text_agg["_has_text"] / denom).fillna(0)
 
     returners = set(future[KEY].unique())
     feat[LABEL] = feat.index.isin(returners).astype(int)

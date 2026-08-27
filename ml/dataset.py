@@ -30,11 +30,14 @@ def _order_values(items: pd.DataFrame) -> pd.DataFrame:
 
 
 def _order_reviews(reviews: pd.DataFrame) -> pd.DataFrame:
-    return (
-        reviews.groupby("order_id", as_index=False)["review_score"]
-        .mean()
-        .rename(columns={"review_score": "review_score"})
+    agg = reviews.groupby("order_id", as_index=False).agg(
+        review_score=("review_score", "mean"),
+        review_comment_message=("review_comment_message", lambda s: " ".join(
+            s.dropna().astype(str)
+        )),
     )
+    agg.loc[agg["review_comment_message"].str.strip() == "", "review_comment_message"] = ""
+    return agg
 
 
 def _mode(series: pd.Series) -> str:
@@ -76,6 +79,7 @@ def order_level() -> pd.DataFrame:
             "order_value",
             "freight_ratio",
             "review_score",
+            "review_comment_message",
             "installments",
             "payment_type",
             "delivery_delay_days",
