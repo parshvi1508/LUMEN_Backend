@@ -27,8 +27,12 @@ services:
         sync: false
       - key: CHANNEL_SEND_URL      # points at the channel service; update if its name differs
         value: https://lumen-channel.onrender.com/send
-      - key: CORS_ORIGINS          # set to your real Vercel URL once it exists; needs the CORS code change
-        value: https://your-frontend.vercel.app
+      - key: CORS_ORIGINS
+        value: https://lumencrm-frontend.vercel.app
+      - key: GROQ_MODEL
+        value: qwen/qwen3.6-27b
+      - key: DEFAULT_TENANT_ID       # demo tenant so new OAuth users see data immediately
+        sync: false
       
 
   - type: web

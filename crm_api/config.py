@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     supabase_jwks_url: str | None = None
     groq_api_key: str
     openrouter_api_key: str
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "qwen/qwen3.6-27b"
     openrouter_model: str = "meta-llama/llama-3.3-70b-instruct:free"
     app_name: str = "Lumen CRM API"
     cors_origins: str = "https://lumencrm-frontend.vercel.app"
