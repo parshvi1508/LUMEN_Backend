@@ -354,3 +354,19 @@ scale. None of these are presented as production-final; each names its swap.
 **Generated:** Backend: campaign_service.create_campaign now accepts tenant_id, stamps it on Campaign + Communication rows. New create_winback_campaign builds a lapsed-customer segment AST (last_order_at older_than_days 180, optional total_spend percentile filter by tier), upserts segment on definition_hash, calls tenant-aware create_campaign. POST /api/v1/campaigns/win-back route. WinBackRequest schema. tests/test_winback.py (4 tests: creates segment + draft, high tier filters by spend, reuses segment on repeat, tenant isolation). Frontend: Today nav item, /today page with TodayWorklist + DecisionDrawer (right-side drawer with SHAP reasons, one-click Launch win-back button). Dashboard PriorityRow "Win back" buttons call the endpoint directly instead of linking to /campaigns/new. CampaignDetail gets P&L card (cost, revenue, profit, ROI). Fixed react-hooks/refs bug by moving ref mutation from useMemo to useEffect. useCampaignPnl and useWinBack hooks. GitHub issues created for remaining recruiter flags (#18-#22, #25).
 
 **Checks:** ruff clean; tsc --noEmit passes; py_compile passes. Merged to master on both repos.
+
+## 2026-08-27, Slice S27: NLP features, uplift model, UX pass
+
+**Asked:** Work on issues #18 (review-text NLP), #19 (uplift model), #25 (frontend lint). Improve frontend from a user's perspective.
+
+**Generated:**
+
+**Issue #18 (NLP):** dataset.py now extracts review_comment_message per order (41k reviews with text out of 99k). features.py adds 3 new features: review_word_count (avg words per customer), review_text_ratio (fraction of reviews with text), review_text (concatenated text). split.py preprocessor adds a TF-IDF (max_features=500, sublinear_tf) + TruncatedSVD (5 components) text pipeline. Total features: 21 (was 16). Results: test Brier 0.203 (was 0.211), ROC-AUC 0.614 (improved), calibrated Brier 0.0116 (stable). 96,095 customers scored.
+
+**Issue #19 (Uplift):** ml/uplift.py implements T-learner framework with separate HistGradientBoosting models for treatment and control groups. Hash-based deterministic proxy for treatment assignment (20% treated) since no real campaign holdout exists yet. Qini score, AUC per group, and uplift distribution reported in model card. Treatment AUC 0.59, control AUC 0.63. Negative Qini expected with synthetic proxy; framework correct and ready for real campaign data.
+
+**Issue #25 (Frontend lint):** eslint reports zero errors in our source code. All warnings are from .agents/skills/impeccable/ (third-party plugin). No action needed.
+
+**UX improvements:** Landing page CTAs route to /today (action-first, not analytics-first). Stats updated to 96k scored + NLP callout. Today page gets portfolio summary cards (revenue at risk, recoverable, lapsed count, avg EV) above the worklist, plus link to revenue radar. Dashboard priority list header links to full worklist. DecisionDrawer adds channel picker (email/SMS/WhatsApp) with visual toggle and confirmation text showing target tier.
+
+**Checks:** ruff clean; tsc --noEmit clean. Model retrained and scored with new features. Merged to master on both repos.
