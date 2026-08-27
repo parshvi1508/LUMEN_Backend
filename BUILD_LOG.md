@@ -346,3 +346,11 @@ scale. None of these are presented as production-final; each names its swap.
 **Real result against the loaded tenant:** 95,420 scored; revenue-at-risk R$11,057,609; high-tier reactivation opportunity R$80,948; portfolio expected value R$153,156. Decision list returns per-customer action plus SHAP reasons.
 
 **Checks:** ruff clean; 5 economics + 3 serving tests pass; portfolio and decisions verified live against the loaded data.
+
+## 2026-08-27, Slice S26: Closed-loop win-back endpoint
+
+**Asked:** Build the closed-loop task-based Today view. Backend: tenant-safe campaign creation, win-back prefill endpoint. Frontend: Today worklist page, DecisionDrawer, win-back mutation, P&L card on CampaignDetail, fix react-hooks/refs bug. Push, merge, raise issues for remaining work.
+
+**Generated:** Backend: campaign_service.create_campaign now accepts tenant_id, stamps it on Campaign + Communication rows. New create_winback_campaign builds a lapsed-customer segment AST (last_order_at older_than_days 180, optional total_spend percentile filter by tier), upserts segment on definition_hash, calls tenant-aware create_campaign. POST /api/v1/campaigns/win-back route. WinBackRequest schema. tests/test_winback.py (4 tests: creates segment + draft, high tier filters by spend, reuses segment on repeat, tenant isolation). Frontend: Today nav item, /today page with TodayWorklist + DecisionDrawer (right-side drawer with SHAP reasons, one-click Launch win-back button). Dashboard PriorityRow "Win back" buttons call the endpoint directly instead of linking to /campaigns/new. CampaignDetail gets P&L card (cost, revenue, profit, ROI). Fixed react-hooks/refs bug by moving ref mutation from useMemo to useEffect. useCampaignPnl and useWinBack hooks. GitHub issues created for remaining recruiter flags (#18-#22, #25).
+
+**Checks:** ruff clean; tsc --noEmit passes; py_compile passes. Merged to master on both repos.
