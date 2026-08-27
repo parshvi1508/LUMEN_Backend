@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from crm_api.db import get_session
 from crm_api.http_client import get_http_client
 from crm_api.models import Campaign, Communication, CommunicationEvent, Order
-from crm_api.schemas.campaigns import CampaignCreate, CampaignOut, CampaignStats
+from crm_api.schemas.campaigns import CampaignCreate, CampaignOut, CampaignStats, WinBackRequest
 from crm_api.schemas.scores import CampaignPnl
 from crm_api.services import campaign_service, dispatch_service, scores_service, stats_service
 from crm_api.services.segment_compiler import SegmentCompileError
@@ -31,6 +31,20 @@ async def list_campaigns(session: SessionDep) -> list[Campaign]:
 async def create_campaign(payload: CampaignCreate, session: SessionDep) -> Campaign:
     try:
         return await campaign_service.create_campaign(session, payload)
+    except campaign_service.SegmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="segment not found") from exc
+    except SegmentCompileError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/win-back", response_model=CampaignOut, status_code=201)
+async def create_winback(
+    payload: WinBackRequest,
+    session: SessionDep,
+    tenant_id: Annotated[uuid.UUID, Depends(require_tenant)],
+) -> Campaign:
+    try:
+        return await campaign_service.create_winback_campaign(session, tenant_id, payload)
     except campaign_service.SegmentNotFoundError as exc:
         raise HTTPException(status_code=404, detail="segment not found") from exc
     except SegmentCompileError as exc:

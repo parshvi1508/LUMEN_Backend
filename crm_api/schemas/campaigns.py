@@ -12,6 +12,13 @@ class CampaignCreate(BaseModel):
     message_template: str = Field(min_length=1)
 
 
+class WinBackRequest(BaseModel):
+    name: str = Field(min_length=1)
+    channel: Literal["whatsapp", "sms", "email"]
+    message_template: str = Field(min_length=1)
+    tier: Literal["high", "mid", "low"] | None = None
+
+
 class FunnelStep(BaseModel):
     status: str
     rank: int

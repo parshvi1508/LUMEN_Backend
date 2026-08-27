@@ -1,3 +1,5 @@
+import hashlib
+import json
 import re
 import uuid
 from decimal import Decimal
@@ -7,8 +9,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crm_api.models import Campaign, Communication, Customer, Order, Segment
-from crm_api.schemas.campaigns import CampaignCreate
-from crm_api.schemas.segments import RuleGroup
+from crm_api.schemas.campaigns import CampaignCreate, WinBackRequest
+from crm_api.schemas.segments import RuleGroup, RuleLeaf
 from crm_api.services import dispatch_service, segment_compiler
 
 TOKEN_RE = re.compile(r"\{\{(\w+)\}\}")
@@ -57,13 +59,19 @@ def customer_fields(customer: Customer, last_order_amount: Decimal | None) -> di
     }
 
 
-async def create_campaign(session: AsyncSession, payload: CampaignCreate) -> Campaign:
+async def create_campaign(
+    session: AsyncSession,
+    payload: CampaignCreate,
+    tenant_id: uuid.UUID | None = None,
+) -> Campaign:
     segment = await session.get(Segment, payload.segment_id)
     if segment is None:
         raise SegmentNotFoundError(str(payload.segment_id))
 
     definition = RuleGroup.model_validate(segment.definition)
     where = segment_compiler.compile_definition(definition)
+    if tenant_id is not None:
+        where = where & (Customer.tenant_id == tenant_id)
 
     latest_order = (
         select(Order.customer_id, Order.amount)
@@ -80,6 +88,7 @@ async def create_campaign(session: AsyncSession, payload: CampaignCreate) -> Cam
 
     campaign = Campaign(
         name=payload.name,
+        tenant_id=tenant_id,
         segment_id=segment.id,
         channel=payload.channel,
         message_template=payload.message_template,
@@ -96,6 +105,7 @@ async def create_campaign(session: AsyncSession, payload: CampaignCreate) -> Cam
                 {
                     "id": uuid.uuid4(),
                     "campaign_id": campaign.id,
+                    "tenant_id": tenant_id,
                     "customer_id": customer.id,
                     "channel": payload.channel,
                     "rendered_message": render_message(
@@ -107,6 +117,73 @@ async def create_campaign(session: AsyncSession, payload: CampaignCreate) -> Cam
         )
     await session.commit()
     return campaign
+
+
+LAPSED_DAYS = 180
+TIER_PERCENTILE = {"high": 0.75, "mid": 0.40, "low": 0.0}
+
+
+def _definition_hash(definition: dict) -> str:
+    canonical = json.dumps(definition, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+async def create_winback_campaign(
+    session: AsyncSession, tenant_id: uuid.UUID, payload: WinBackRequest
+) -> Campaign:
+    rules: list[RuleGroup | RuleLeaf] = [
+        RuleLeaf(field="last_order_at", cmp="older_than_days", value=LAPSED_DAYS),
+    ]
+
+    if payload.tier is not None:
+        pct = TIER_PERCENTILE[payload.tier]
+        if pct > 0:
+            threshold = await session.scalar(
+                select(
+                    func.percentile_cont(pct).within_group(Customer.total_spend)
+                ).where(Customer.tenant_id == tenant_id)
+            )
+            if threshold is not None and float(threshold) > 0:
+                rules.append(
+                    RuleLeaf(
+                        field="total_spend",
+                        cmp="gte",
+                        value=round(float(threshold), 2),
+                    )
+                )
+
+    definition = RuleGroup(op="AND", rules=rules)
+    def_dict = definition.model_dump()
+    dhash = _definition_hash(def_dict)
+
+    segment = (
+        await session.execute(
+            select(Segment).where(
+                Segment.tenant_id == tenant_id,
+                Segment.definition_hash == dhash,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if segment is None:
+        segment = Segment(
+            tenant_id=tenant_id,
+            name=f"Win-back lapsed {payload.tier or 'all'}",
+            definition=def_dict,
+            definition_hash=dhash,
+            source="ai",
+            ai_rationale="Auto-generated win-back segment targeting lapsed customers",
+        )
+        session.add(segment)
+        await session.flush()
+
+    create_payload = CampaignCreate(
+        name=payload.name,
+        segment_id=segment.id,
+        channel=payload.channel,
+        message_template=payload.message_template,
+    )
+    return await create_campaign(session, create_payload, tenant_id=tenant_id)
 
 
 async def queued_count(session: AsyncSession, campaign_id: uuid.UUID) -> int:
