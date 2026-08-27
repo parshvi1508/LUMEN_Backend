@@ -25,8 +25,8 @@ services:
         sync: false
       - key: CHANNEL_HMAC_SECRET   # MUST be identical to lumen-channel's value
         sync: false
-      - key: CHANNEL_SEND_URL      # points at the channel service; update if its name differs
-        value: https://lumen-channel.onrender.com/send
+      - key: CHANNEL_SEND_URL
+        value: https://lumen-crm-send.onrender.com/send
       - key: CORS_ORIGINS
         value: https://lumencrm-frontend.vercel.app
       - key: GROQ_MODEL
@@ -47,5 +47,5 @@ services:
     envVars:
       - key: CHANNEL_HMAC_SECRET   # MUST be identical to lumen-crm-api's value
         sync: false
-      - key: CRM_RECEIPTS_URL      # points back at the CRM; update if its name differs
-        value: https://lumen-crm-api.onrender.com/api/v1/receipts
+      - key: CRM_RECEIPTS_URL
+        value: https://lumen-backend-3s2u.onrender.com/api/v1/receipts
