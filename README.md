@@ -1,10 +1,18 @@
 # Lumen CRM backend
 
-A multi-tenant customer-intelligence platform. It ingests customers and orders,
-scores every customer for reactivation risk and expected value with real ML, and
-serves a decision layer: which customers are leaking revenue, why, what to do,
-and the money it is worth. Two FastAPI services share nothing at runtime and
-communicate over HTTP only:
+**A lightweight CRM for small D2C brands that need Klaviyo-level customer
+intelligence without Klaviyo-level complexity.**
+
+Lumen is a multi-tenant customer-intelligence platform. It ingests customers
+and orders, scores every customer for reactivation risk and expected value with
+real ML, and serves a decision layer: which customers are leaking revenue, why,
+what to do, and the money it is worth.
+
+**ICP:** 5-person direct-to-consumer teams that have a few thousand customers
+and no data team. The founder opens Lumen Monday morning and gets one answer:
+"Who should I talk to today, and why?"
+
+Two FastAPI services share nothing at runtime and communicate over HTTP only:
 
 - `crm_api/` is the main API: ingest, segments, campaigns, the ML serving and
   money endpoints, AI endpoints, and the receipt callback API.
@@ -13,6 +21,9 @@ communicate over HTTP only:
 
 The product bet is explainable AI: every decision ships with the reasoning that
 produced it, so a human can verify it before acting.
+
+**Live:** [lumencrm-frontend.vercel.app](https://lumencrm-frontend.vercel.app)
+| Backend: [lumen-backend-3s2u.onrender.com](https://lumen-backend-3s2u.onrender.com)
 
 ## Customer intelligence layer
 
@@ -142,8 +153,8 @@ Channel service: `POST /send` (batch, 202), `GET /dead-letters`, `GET /healthz`.
 
 Python 3.12, FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2, httpx,
 pytest with pytest-asyncio, ruff for lint and format. Postgres via Supabase.
-LLM via Groq primary and OpenRouter fallback, both behind
-`crm_api/services/llm_client.py`.
+LLM via Groq (Qwen 3.6 27B) primary and OpenRouter (Llama 3.3 70B) fallback,
+both behind `crm_api/services/llm_client.py`.
 
 ## Run it
 
@@ -189,7 +200,7 @@ Set these in `.env` (gitignored). See `.env.example` for the full list.
 | `CHANNEL_HMAC_SECRET` | Shared secret signing the receipt callbacks |
 | `CHANNEL_SEND_URL` | Channel service `/send` endpoint the CRM dispatches to |
 | `CRM_RECEIPTS_URL` | CRM `/receipts` endpoint the channel calls back (channel service) |
-| `GROQ_API_KEY`, `GROQ_MODEL` | Primary LLM provider |
+| `GROQ_API_KEY`, `GROQ_MODEL` | Primary LLM provider (default: `qwen/qwen3.6-27b`) |
 | `OPENROUTER_API_KEY`, `OPENROUTER_MODEL` | Fallback LLM provider |
 
 Secrets are never committed. Update `.env.example` whenever a new variable is
