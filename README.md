@@ -153,7 +153,7 @@ Channel service: `POST /send` (batch, 202), `GET /dead-letters`, `GET /healthz`.
 
 Python 3.12, FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2, httpx,
 pytest with pytest-asyncio, ruff for lint and format. Postgres via Supabase.
-LLM via Groq (Qwen 3.6 27B) primary and OpenRouter (Llama 3.3 70B) fallback,
+LLM via Groq (Qwen 3.6 27B) primary and OpenRouter (GPT-OSS 20B) fallback,
 both behind `crm_api/services/llm_client.py`.
 
 ## Run it
